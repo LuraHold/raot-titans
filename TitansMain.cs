@@ -137,6 +137,7 @@ namespace TitansMod
                     var tx = TitanPack.Loaded.GetTexture("tex_vanilla_titan.png");
                     TitanPack.MakeMaterial(tx, Color.white, null);
                     TitanPack.ResetShaderCache();
+                    TitanPack.Loaded.ClearTextureCache(); // recarrega na partida (assets do menu são descartados na troca de cena)
                 }
             }
             catch (Exception e) { LoggerInstance.Warning("TitanPack: " + e.Message); }
@@ -393,7 +394,8 @@ namespace TitansMod
                 sk.isPlayer = false;
                 Transform[] anchors = { t.napeAnchor, t.wristL, t.wristR, t.kneeL, t.kneeR };
                 string[] titles = { "Nuca", "Pulso L", "Pulso R", "Joelho L", "Joelho R" };
-                float[] radii = { heightM * 0.075f, heightM * 0.055f, heightM * 0.055f, heightM * 0.06f, heightM * 0.06f };
+                // nuca generosa (é o alvo principal e a mira assistida escolhe o ponto mais próximo); juntas pequenas
+                float[] radii = { heightM * 0.09f, heightM * 0.035f, heightM * 0.035f, heightM * 0.04f, heightM * 0.04f };
                 var pts = new StrikePoint[anchors.Length];
                 for (int i = 0; i < anchors.Length; i++)
                 {
@@ -432,15 +434,21 @@ namespace TitansMod
                         break;
                     case 1:
                     case 2:
-                        bool right = idx == 2;
-                        if (right ? t.armRGone : t.armLGone) return;
-                        bool wasGrab = t.state == TitanState.Grab && t.grabHand == (right ? t.handR : t.handL);
-                        SeverArm(t, right);
-                        if (wasGrab) { Announce("ESCAPOU cortando o braço! +40 pts"); totalScore += 40; PushPlayer(Vector3.up * 10f); StunTitan(t); }
+                        {
+                            bool right = idx == 2;
+                            if (right ? t.armRGone : t.armLGone) return;
+                            bool wasGrab = t.state == TitanState.Grab && t.grabHand == (right ? t.handR : t.handL);
+                            // junta só conta com golpe de verdade: velocidade mínima e cooldown (evita "raspão" da mira assistida)
+                            if (!wasGrab && (speed < 7f || Time.time - t.lastJointHit < 1.5f)) return;
+                            SeverArm(t, right);
+                            if (wasGrab) { Announce("ESCAPOU cortando o braço! +40 pts"); totalScore += 40; PushPlayer(Vector3.up * 10f); StunTitan(t); }
+                        }
                         break;
                     case 3:
                     case 4:
-                        if (t.state != TitanState.Stunned) StunTitan(t);
+                        if (t.state == TitanState.Stunned || t.state == TitanState.Grab) return;
+                        if (speed < 7f || Time.time - t.lastJointHit < 1.5f) return;
+                        StunTitan(t);
                         break;
                 }
             }
@@ -1089,36 +1097,47 @@ namespace TitansMod
         }
 
         // Obstáculo na frente (parede/casa/árvore)? Ignora chão, rampas, titãs e jogadores.
+        // Raios em 3 alturas (canela, peito, cabeça) pra não passar por cima de casas baixas nem por baixo de arcos.
         private bool PathBlocked(Titan t, Vector3 dir, float dist, out RaycastHit blocker)
         {
             blocker = new RaycastHit();
-            Vector3 origin = t.tr.position + Vector3.up * t.height * 0.45f;
-            var hits = Physics.RaycastAll(origin, dir, dist);
             float best = float.MaxValue; bool found = false;
-            foreach (var h in hits)
+            float[] hs = { 0.12f, 0.45f, 0.8f };
+            foreach (var hf in hs)
             {
-                if (h.collider == null || h.collider.isTrigger) continue;
-                var r = h.collider.transform.root;
-                if (r != null && r.name.StartsWith("TITAN")) continue;
-                if (h.normal.y > 0.6f) continue; // chão / rampa
-                bool isPlayer = false;
-                foreach (var p in players) if ((p.pos - h.point).sqrMagnitude < 9f) { isPlayer = true; break; }
-                if (isPlayer) continue;
-                if (h.distance < best) { best = h.distance; blocker = h; found = true; }
+                Vector3 origin = t.tr.position + Vector3.up * t.height * hf;
+                var hits = Physics.RaycastAll(origin, dir, dist);
+                foreach (var h in hits)
+                {
+                    if (h.collider == null || h.collider.isTrigger) continue;
+                    var r = h.collider.transform.root;
+                    if (r != null && r.name.StartsWith("TITAN")) continue;
+                    if (h.normal.y > 0.6f) continue; // chão / rampa
+                    bool isPlayer = false;
+                    foreach (var p in players) if ((p.pos - h.point).sqrMagnitude < 9f) { isPlayer = true; break; }
+                    if (isPlayer) continue;
+                    if (h.distance < best) { best = h.distance; blocker = h; found = true; }
+                }
             }
             return found;
         }
 
-        // Quebra objetos pequenos (cercas, barracas, casinhas): some com vapor/poeira. Nunca terreno.
+        private static readonly string[] BreakableWords = { "crate", "box", "barrel", "fence", "cart", "wagon", "bench", "table", "stall", "tent", "hay", "sack", "lamp", "pole", "sign", "bush", "plant", "tree", "caixa", "barril", "cerca", "prop", "debris", "rubble", "basket", "bucket", "chair", "log" };
+
+        // Quebra só PROPS pequenos (caixas, barris, cercas, carroças, árvores pequenas). Paredes/casas: nunca.
         private bool TryBreak(Titan t, RaycastHit hit)
         {
             if (t.state != TitanState.Chase || t.kind == TitanKind.Crawler) return false;
             var go = hit.collider.gameObject;
             string n = (go.name + "/" + (go.transform.parent != null ? go.transform.parent.name : "")).ToLowerInvariant();
             if (n.Contains("terrain") || n.Contains("ground") || n.Contains("floor") || n.Contains("road") || n.Contains("street")
-                || n.Contains("boundary") || n.Contains("ceiling") || n.Contains("map") || n.Contains("water")) return false;
+                || n.Contains("boundary") || n.Contains("ceiling") || n.Contains("map") || n.Contains("water")
+                || n.Contains("wall") || n.Contains("house") || n.Contains("build") || n.Contains("roof") || n.Contains("tower")) return false;
+            bool whitelisted = false;
+            foreach (var w in BreakableWords) if (n.Contains(w)) { whitelisted = true; break; }
+            if (!whitelisted) return false;
             Bounds b = hit.collider.bounds;
-            if (b.size.y > t.height * 0.9f || b.size.magnitude > t.height * 2.2f) return false;
+            if (b.size.y > t.height * 0.6f || b.size.magnitude > t.height * 0.9f) return false;
             try
             {
                 go.SetActive(false);

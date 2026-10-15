@@ -152,6 +152,8 @@ namespace TitansMod
 
         public static Action<string> Log = s => { };
 
+        public void ClearTextureCache() { texCache.Clear(); }
+
         public Texture2D GetTexture(string file)
         {
             if (string.IsNullOrEmpty(file)) return null;
@@ -176,6 +178,7 @@ namespace TitansMod
                     return null;
                 }
                 try { t.name = file; } catch { }
+                try { t.hideFlags = HideFlags.DontUnloadUnusedAsset; } catch { } // sobrevive à troca de cena
                 Log("textura ok: " + file + " " + t.width + "x" + t.height);
                 texCache[file] = t;
                 return t;
