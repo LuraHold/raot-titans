@@ -55,6 +55,7 @@ namespace TitansMod
             public bool usesPack;
             public TitanAnim anim;
             public Transform[] boneTr;
+            public List<CpuSkin> skins;
             public float actionUntil;      // enquanto Time.time < isto, clip de ação tem prioridade
             public float pendingPushAt;    // hora de aplicar o empurrão da patada
             public bool screamed;
@@ -399,28 +400,18 @@ namespace TitansMod
             Color tint = kind == TitanKind.Ally ? new Color(0.55f, 0.7f, 1f) : Color.white;
 
             Transform[] boneTr;
-            var root = pack.BuildInstance(tex, tint, titanSkinMat, out boneTr);
+            List<CpuSkin> skins;
+            var root = pack.BuildInstance(tex, tint, titanSkinMat, out boneTr, out skins);
             root.name = "TITAN_" + kind;
-            t.root = root; t.tr = root.transform; t.boneTr = boneTr;
+            t.root = root; t.tr = root.transform; t.boneTr = boneTr; t.skins = skins;
             t.anim = new TitanAnim(pack, boneTr);
             t.anim.Play(kind == TitanKind.Crawler ? "crawler.idle" : "idle", true, 0.01f);
             t.anim.Update(0.02f); // aplica pose inicial
+            foreach (var s in skins) s.Apply();
 
-            // mede a altura crua e escala pro tamanho desejado
+            // escala pro tamanho desejado a partir da altura nativa do modelo
             float desired = 2.45f * scale;
-            float raw = 2.45f;
-            try
-            {
-                Bounds b = new Bounds(root.transform.position, Vector3.one);
-                bool first = true;
-                foreach (var r in root.GetComponentsInChildren<Renderer>(true))
-                {
-                    if (first) { b = r.bounds; first = false; } else b.Encapsulate(r.bounds);
-                }
-                if (!first && b.size.y > 0.2f) raw = b.size.y;
-            }
-            catch { }
-            root.transform.localScale = Vector3.one * (desired / raw);
+            root.transform.localScale = Vector3.one * (desired / pack.rawHeight);
             t.height = (kind == TitanKind.Crawler ? 0.62f : 1f) * desired;
 
             // âncoras nos hitboxes/sockets reais do rig do AoTTG2
@@ -746,7 +737,12 @@ namespace TitansMod
                 if (t.root == null) { titans.RemoveAt(i); continue; }
                 t.stateTime += dt;
                 float age = Time.time - t.spawnTime;
-                if (t.anim != null) t.anim.Update(dt);
+                if (t.anim != null)
+                {
+                    t.anim.Update(dt);
+                    if (t.skins != null)
+                        foreach (var s in t.skins) s.Apply();
+                }
 
                 // patada agendada (sincronizada com a animação de swing)
                 if (t.pendingPushAt > 0f && Time.time >= t.pendingPushAt)

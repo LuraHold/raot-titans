@@ -26,6 +26,7 @@ namespace TitansMod
         public class ClipTrack { public int bone; public bool hasPos, hasRot; public Vector3[] pos; public Quaternion[] rot; }
         public class ClipDef { public string name; public float dur; public int frames; public ClipTrack[] tracks; }
 
+        public float rawHeight = 2.45f; // altura do modelo em unidades nativas (medida dos vértices)
         public List<BoneDef> bones = new List<BoneDef>();
         public List<MeshDef> meshes = new List<MeshDef>();
         public Dictionary<string, string> matTex = new Dictionary<string, string>();
@@ -129,8 +130,16 @@ namespace TitansMod
                         p.clips[c.name] = c;
                     }
                 }
+                float minY = float.MaxValue, maxY = float.MinValue;
+                foreach (var m in p.meshes)
+                    foreach (var v in m.verts)
+                    {
+                        if (v.y < minY) minY = v.y;
+                        if (v.y > maxY) maxY = v.y;
+                    }
+                if (maxY > minY + 0.2f) p.rawHeight = maxY - minY;
                 Loaded = p;
-                log("TitanPack: " + p.bones.Count + " bones, " + p.meshes.Count + " meshes, " + p.clips.Count + " clips, " + p.matTex.Count + " materiais");
+                log("TitanPack: " + p.bones.Count + " bones, " + p.meshes.Count + " meshes, " + p.clips.Count + " clips, altura crua " + p.rawHeight.ToString("F2"));
                 return true;
             }
             catch (Exception e) { log("TitanPack falhou: " + e); return false; }
@@ -156,8 +165,9 @@ namespace TitansMod
             catch { return null; }
         }
 
-        // Monta uma instância: hierarquia de bones + SMRs skinnados. Retorna root; bones out por índice.
-        public GameObject BuildInstance(string bodyTexFile, Color tint, Material shaderDonor, out Transform[] boneTr)
+        // Monta uma instância: hierarquia de bones + malhas skinnadas por CPU.
+        // (BoneWeight[] não passa pelo interop do Unhollower, então o skinning é feito na mão a cada frame.)
+        public GameObject BuildInstance(string bodyTexFile, Color tint, Material shaderDonor, out Transform[] boneTr, out List<CpuSkin> skins)
         {
             boneTr = new Transform[bones.Count];
             for (int i = 0; i < bones.Count; i++)
@@ -172,6 +182,7 @@ namespace TitansMod
                 boneTr[i] = tr;
             }
             var root = boneTr[0].gameObject;
+            skins = new List<CpuSkin>();
 
             foreach (var m in meshes)
             {
@@ -179,43 +190,31 @@ namespace TitansMod
                 mesh.vertices = m.verts;
                 mesh.normals = m.normals;
                 mesh.uv = m.uv;
-                var bw = new BoneWeight[m.verts.Length];
-                for (int v = 0; v < bw.Length; v++)
-                {
-                    var w = new BoneWeight();
-                    w.boneIndex0 = m.w0[v]; w.weight0 = m.f0[v];
-                    w.boneIndex1 = m.w1[v]; w.weight1 = m.f1[v];
-                    w.boneIndex2 = m.w2[v]; w.weight2 = m.f2[v];
-                    w.boneIndex3 = m.w3[v]; w.weight3 = m.f3[v];
-                    bw[v] = w;
-                }
-                mesh.boneWeights = bw;
-                mesh.bindposes = m.bindposes;
                 mesh.subMeshCount = m.subs.Length;
                 for (int s = 0; s < m.subs.Length; s++)
                     mesh.SetTriangles(m.subs[s].tris, s);
+                // bounds generoso fixo: skinning por CPU não atualiza bounds por frame
                 mesh.RecalculateBounds();
+                var mb = mesh.bounds;
+                mesh.bounds = new Bounds(mb.center, mb.size * 2.5f);
 
                 var go = new GameObject(m.name);
                 go.transform.SetParent(root.transform, false);
-                var smr = go.AddComponent<SkinnedMeshRenderer>();
-                var btr = new Transform[m.boneIdx.Length];
-                for (int bi = 0; bi < btr.Length; bi++) btr[bi] = boneTr[m.boneIdx[bi]];
-                smr.bones = btr;
-                smr.sharedMesh = mesh;
-                smr.rootBone = boneTr[FindBone("hip")] ?? root.transform;
-                smr.updateWhenOffscreen = true;
+                var mf = go.AddComponent<MeshFilter>();
+                mf.sharedMesh = mesh;
+                var mr = go.AddComponent<MeshRenderer>();
 
                 var mats = new Material[m.subs.Length];
                 for (int s = 0; s < m.subs.Length; s++)
                 {
                     string texFile;
                     matTex.TryGetValue(m.subs[s].mat, out texFile);
-                    // corpo usa a textura escolhida da variante
                     if (m.name == "Body" && !string.IsNullOrEmpty(bodyTexFile)) texFile = bodyTexFile;
                     mats[s] = MakeMaterial(GetTexture(texFile), tint, shaderDonor);
                 }
-                smr.materials = mats;
+                mr.materials = mats;
+
+                skins.Add(new CpuSkin(m, mesh, go.transform, boneTr));
             }
             return root;
         }
@@ -249,6 +248,93 @@ namespace TitansMod
             try { if (tex != null) m.mainTexture = tex; } catch { }
             try { m.color = tint; } catch { }
             return m;
+        }
+    }
+
+    // Skinning por CPU: v' = meshLocal^-1 * Σ w_i * boneL2W_i * bind_i * v
+    // Toda a matemática em floats puros (sem operadores interop por elemento).
+    public class CpuSkin
+    {
+        private readonly TitanPack.MeshDef def;
+        private readonly Mesh mesh;
+        private readonly Transform meshTr;
+        private readonly Transform[] boneRefs;   // bones do SMR (já resolvidos pro esqueleto)
+        private readonly float[][] binds;        // 3x4 por bone (linhas 0..2 da bindpose)
+        private readonly Vector3[] outVerts;
+        private readonly float[][] final;        // matrizes finais 3x4 por bone
+
+        public CpuSkin(TitanPack.MeshDef m, Mesh mesh_, Transform meshTr_, Transform[] skeleton)
+        {
+            def = m; mesh = mesh_; meshTr = meshTr_;
+            boneRefs = new Transform[m.boneIdx.Length];
+            for (int i = 0; i < boneRefs.Length; i++) boneRefs[i] = skeleton[m.boneIdx[i]];
+            binds = new float[m.bindposes.Length][];
+            for (int i = 0; i < binds.Length; i++)
+            {
+                var b = m.bindposes[i];
+                binds[i] = new float[12] { b.m00, b.m01, b.m02, b.m03, b.m10, b.m11, b.m12, b.m13, b.m20, b.m21, b.m22, b.m23 };
+            }
+            outVerts = new Vector3[m.verts.Length];
+            final = new float[boneRefs.Length][];
+            for (int i = 0; i < final.Length; i++) final[i] = new float[12];
+        }
+
+        private static void Mul34(float[] a, float[] b, float[] o)
+        {
+            // o = a * b (ambas 3x4, linha de baixo implícita 0,0,0,1)
+            o[0] = a[0] * b[0] + a[1] * b[4] + a[2] * b[8];
+            o[1] = a[0] * b[1] + a[1] * b[5] + a[2] * b[9];
+            o[2] = a[0] * b[2] + a[1] * b[6] + a[2] * b[10];
+            o[3] = a[0] * b[3] + a[1] * b[7] + a[2] * b[11] + a[3];
+            o[4] = a[4] * b[0] + a[5] * b[4] + a[6] * b[8];
+            o[5] = a[4] * b[1] + a[5] * b[5] + a[6] * b[9];
+            o[6] = a[4] * b[2] + a[5] * b[6] + a[6] * b[10];
+            o[7] = a[4] * b[3] + a[5] * b[7] + a[6] * b[11] + a[7];
+            o[8] = a[8] * b[0] + a[9] * b[4] + a[10] * b[8];
+            o[9] = a[8] * b[1] + a[9] * b[5] + a[10] * b[9];
+            o[10] = a[8] * b[2] + a[9] * b[6] + a[10] * b[10];
+            o[11] = a[8] * b[3] + a[9] * b[7] + a[10] * b[11] + a[11];
+        }
+
+        private static readonly float[] tmpA = new float[12];
+        private static readonly float[] tmpB = new float[12];
+        private static readonly float[] tmpC = new float[12];
+
+        private static void From(Matrix4x4 m, float[] o)
+        {
+            o[0] = m.m00; o[1] = m.m01; o[2] = m.m02; o[3] = m.m03;
+            o[4] = m.m10; o[5] = m.m11; o[6] = m.m12; o[7] = m.m13;
+            o[8] = m.m20; o[9] = m.m21; o[10] = m.m22; o[11] = m.m23;
+        }
+
+        public void Apply()
+        {
+            From(meshTr.worldToLocalMatrix, tmpA);
+            for (int i = 0; i < boneRefs.Length; i++)
+            {
+                var bt = boneRefs[i];
+                if (bt == null) continue;
+                From(bt.localToWorldMatrix, tmpB);
+                // final = meshW2L * (boneL2W * bind)
+                Mul34(tmpB, binds[i], tmpC);
+                Mul34(tmpA, tmpC, final[i]);
+            }
+            var verts = def.verts;
+            for (int v = 0; v < verts.Length; v++)
+            {
+                float px = verts[v].x, py = verts[v].y, pz = verts[v].z;
+                float x = 0f, y = 0f, z = 0f;
+                float w = def.f0[v];
+                if (w > 0f) { var f = final[def.w0[v]]; x += w * (f[0] * px + f[1] * py + f[2] * pz + f[3]); y += w * (f[4] * px + f[5] * py + f[6] * pz + f[7]); z += w * (f[8] * px + f[9] * py + f[10] * pz + f[11]); }
+                w = def.f1[v];
+                if (w > 0f) { var f = final[def.w1[v]]; x += w * (f[0] * px + f[1] * py + f[2] * pz + f[3]); y += w * (f[4] * px + f[5] * py + f[6] * pz + f[7]); z += w * (f[8] * px + f[9] * py + f[10] * pz + f[11]); }
+                w = def.f2[v];
+                if (w > 0f) { var f = final[def.w2[v]]; x += w * (f[0] * px + f[1] * py + f[2] * pz + f[3]); y += w * (f[4] * px + f[5] * py + f[6] * pz + f[7]); z += w * (f[8] * px + f[9] * py + f[10] * pz + f[11]); }
+                w = def.f3[v];
+                if (w > 0f) { var f = final[def.w3[v]]; x += w * (f[0] * px + f[1] * py + f[2] * pz + f[3]); y += w * (f[4] * px + f[5] * py + f[6] * pz + f[7]); z += w * (f[8] * px + f[9] * py + f[10] * pz + f[11]); }
+                outVerts[v] = new Vector3(x, y, z);
+            }
+            mesh.vertices = outVerts;
         }
     }
 
