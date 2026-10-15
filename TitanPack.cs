@@ -336,6 +336,28 @@ namespace TitansMod
             }
             mesh.vertices = outVerts;
         }
+
+        // Mede o tamanho REAL pós-skinning (em espaço local do root). Chamar depois de um Apply().
+        public void Measure(ref float minY, ref float maxY)
+        {
+            for (int v = 0; v < outVerts.Length; v++)
+            {
+                float y = outVerts[v].y;
+                if (y < minY) minY = y;
+                if (y > maxY) maxY = y;
+            }
+        }
+
+        public void RefreshBounds()
+        {
+            try
+            {
+                mesh.RecalculateBounds();
+                var b = mesh.bounds;
+                mesh.bounds = new Bounds(b.center, b.size * 2f + Vector3.one * 0.5f);
+            }
+            catch { }
+        }
     }
 
     // Player de animação: toca os clips baked com crossfade.

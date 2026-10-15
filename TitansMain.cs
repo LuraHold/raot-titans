@@ -135,6 +135,7 @@ namespace TitansMod
                 if (Input.GetKeyDown(KeyCode.F8)) { frozen = !frozen; Say(frozen ? "Titãs congelados" : "Titãs soltos"); }
                 if (Input.GetKeyDown(KeyCode.F9)) ToggleWaves();
                 if (Input.GetKeyDown(KeyCode.F10)) ToggleMenu();
+                if (Input.GetKeyDown(KeyCode.F11)) ToggleSkyFree();
                 if (Input.GetKeyDown(KeyCode.T)) TryEren();
                 if (Input.GetKeyDown(KeyCode.G)) TryLevi();
                 if (Input.GetKeyDown(KeyCode.Y)) TryMikasa();
@@ -342,12 +343,41 @@ namespace TitansMod
             }
         }
 
+        private int groundLayer = -1; // layer do chão do mapa, detectada no primeiro spawn
+
         private Vector3 GroundAt(Vector3 pos, float refY)
         {
             Vector3 origin = new Vector3(pos.x, refY + 35f, pos.z);
-            RaycastHit hit;
-            if (Physics.Raycast(origin, Vector3.down, out hit, 300f)) return hit.point;
-            return new Vector3(pos.x, refY, pos.z);
+            var hits = Physics.RaycastAll(origin, Vector3.down, 300f);
+            float best = float.MaxValue;
+            Vector3 result = new Vector3(pos.x, refY, pos.z);
+            bool found = false;
+            foreach (var h in hits)
+            {
+                if (h.collider == null) continue;
+                var r = h.collider.transform.root;
+                if (r != null && r.name.StartsWith("TITAN")) continue; // nunca subir no próprio titã
+                if (h.distance < best)
+                {
+                    best = h.distance; result = h.point; found = true;
+                    if (groundLayer < 0) groundLayer = h.collider.gameObject.layer;
+                }
+            }
+            if (!found) return new Vector3(pos.x, refY, pos.z);
+            return result;
+        }
+
+        private void AddHookCollider(Titan t, string bone, float radius, float height)
+        {
+            var b = t.boneTr[TitanPack.Loaded.FindBone(bone)];
+            if (b == null) return;
+            var go = new GameObject("TITANCOL_" + bone);
+            go.transform.SetParent(b, false);
+            if (groundLayer >= 0) go.layer = groundLayer;
+            var c = go.AddComponent<CapsuleCollider>();
+            c.radius = radius;
+            c.height = height;
+            c.direction = 1; // eixo Y do osso
         }
 
         private GameObject Part(Titan t, Transform parent, PrimitiveType prim, Vector3 pos, Vector3 scl, Color c, bool isSkin = true)
@@ -409,9 +439,31 @@ namespace TitansMod
             t.anim.Update(0.02f); // aplica pose inicial
             foreach (var s in skins) s.Apply();
 
-            // escala pro tamanho desejado a partir da altura nativa do modelo
-            float desired = 2.45f * scale;
-            root.transform.localScale = Vector3.one * (desired / pack.rawHeight);
+            // mede o tamanho REAL pós-skinning e escala pro desejado (cfgScale = altura em "jogadores", ~1.7m cada)
+            float minY = float.MaxValue, maxY = float.MinValue;
+            foreach (var s in skins) s.Measure(ref minY, ref maxY);
+            float span = (maxY > minY + 0.05f) ? (maxY - minY) : 2.45f;
+            float desired = 1.7f * scale;
+            root.transform.localScale = Vector3.one * (desired / span);
+            foreach (var s in skins) { s.Apply(); s.RefreshBounds(); }
+
+            // colisores pros ganchos do ODM grudarem no corpo (tamanhos proporcionais ao modelo nativo)
+            try
+            {
+                float u = span;
+                AddHookCollider(t, "hip", u * 0.16f, u * 0.3f);
+                AddHookCollider(t, "chest", u * 0.15f, u * 0.3f);
+                AddHookCollider(t, "head", u * 0.11f, u * 0.2f);
+                AddHookCollider(t, "thigh.L", u * 0.08f, u * 0.3f);
+                AddHookCollider(t, "thigh.R", u * 0.08f, u * 0.3f);
+                AddHookCollider(t, "shin.L", u * 0.06f, u * 0.3f);
+                AddHookCollider(t, "shin.R", u * 0.06f, u * 0.3f);
+                AddHookCollider(t, "upper_arm.L", u * 0.06f, u * 0.25f);
+                AddHookCollider(t, "upper_arm.R", u * 0.06f, u * 0.25f);
+                AddHookCollider(t, "forearm.L", u * 0.05f, u * 0.22f);
+                AddHookCollider(t, "forearm.R", u * 0.05f, u * 0.22f);
+            }
+            catch (Exception e) { LoggerInstance.Warning("colliders: " + e.Message); }
             t.height = (kind == TitanKind.Crawler ? 0.62f : 1f) * desired;
 
             // âncoras nos hitboxes/sockets reais do rig do AoTTG2
@@ -445,7 +497,7 @@ namespace TitansMod
                 if (col != null) Object.Destroy(col);
                 glow.name = "nape_glow";
                 glow.transform.SetParent(t.napeAnchor, false);
-                glow.transform.localScale = Vector3.one * 0.35f;
+                glow.transform.localScale = Vector3.one * Mathf.Max(0.05f, span * 0.03f);
                 try
                 {
                     var m = glow.GetComponent<Renderer>().material;
@@ -1120,6 +1172,43 @@ namespace TitansMod
             Say("Titãs removidos");
         }
 
+        // ---------------- céu livre (F11): desliga tetos e limites invisíveis do mapa ----------------
+
+        private readonly List<Collider> skyDisabled = new List<Collider>();
+        private bool skyFree;
+
+        private void ToggleSkyFree()
+        {
+            if (skyFree)
+            {
+                foreach (var c in skyDisabled) { try { if (c != null) c.enabled = true; } catch { } }
+                skyDisabled.Clear();
+                skyFree = false;
+                Say("Tetos/limites do mapa religados");
+                return;
+            }
+            int n = 0;
+            try
+            {
+                foreach (var c in Object.FindObjectsOfType<Collider>())
+                {
+                    if (c == null || !c.enabled) continue;
+                    var root = c.transform.root;
+                    if (root != null && root.name.StartsWith("TITAN")) continue;
+                    string nm = (c.gameObject.name + "/" + c.transform.parent?.name).ToLowerInvariant();
+                    if (nm.Contains("ceiling") || nm.Contains("boundary") || nm.Contains("barrier") || nm.Contains("killbound"))
+                    {
+                        c.enabled = false;
+                        skyDisabled.Add(c);
+                        n++;
+                    }
+                }
+            }
+            catch (Exception e) { LoggerInstance.Warning("SkyFree: " + e.Message); }
+            skyFree = true;
+            Announce("CÉU LIVRE! " + n + " teto(s)/limite(s) desligados — voa!");
+        }
+
         // ---------------- menu F10 ----------------
 
         private void ToggleMenu()
@@ -1192,7 +1281,7 @@ namespace TitansMod
                 + "  |  " + SkillLabel("Mikasa", "Y", mikasaReadyAt, 0f)
                 + "  |  " + SkillLabel("Armin", "H", arminReadyAt, arminEndsAt);
             GUI.Label(new Rect(14f, 12f, 1600f, 24f), "<b><color=#ff5544>" + line + "</color></b>");
-            GUI.Label(new Rect(14f, 34f, 1600f, 22f), "<color=#999999>F6 titã  F9 waves  F10 menu  F7 limpar  F8 congelar  —  nuca = morte; pulsos/joelhos = dano</color>");
+            GUI.Label(new Rect(14f, 34f, 1600f, 22f), "<color=#999999>F6 titã  F9 waves  F10 menu  F11 céu livre  F7 limpar  F8 congelar  —  nuca = morte; pulsos/joelhos = dano</color>");
             if (Time.time - lastMsgTime < 3.5f)
                 GUI.Label(new Rect(14f, 56f, 1600f, 24f), "<color=#ffcc44>" + lastMsg + "</color>");
             if (Time.time - cutMsgTime < 5f)
