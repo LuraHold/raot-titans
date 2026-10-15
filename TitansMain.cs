@@ -57,6 +57,8 @@ namespace TitansMod
             public Transform[] boneTr;
             public List<CpuSkin> skins;
             public float actionUntil;      // enquanto Time.time < isto, clip de ação tem prioridade
+            public float avoidHeading;     // rumo de desvio de obstáculo
+            public float avoidUntil;
             public float pendingPushAt;    // hora de aplicar o empurrão da patada
             public bool screamed;
         }
@@ -120,7 +122,14 @@ namespace TitansMod
             try
             {
                 string assetDir = Path.Combine(MelonUtils.GameDirectory, "Mods", "TitansAssets");
-                TitanPack.TryLoad(assetDir, s => LoggerInstance.Msg(s));
+                TitanPack.Log = s => LoggerInstance.Msg(s);
+                if (TitanPack.TryLoad(assetDir, s => LoggerInstance.Msg(s)))
+                {
+                    // auto-teste no boot: textura decodifica? shader existe? (aparece no smoke test sem precisar spawnar)
+                    var tx = TitanPack.Loaded.GetTexture("tex_vanilla_titan.png");
+                    TitanPack.MakeMaterial(tx, Color.white, null);
+                    TitanPack.ResetShaderCache();
+                }
             }
             catch (Exception e) { LoggerInstance.Warning("TitanPack: " + e.Message); }
             LoggerInstance.Msg("Titans v4 (modelos AoTTG2). F6 titã | F9 waves | F10 menu | T Eren | G Levi | Y Mikasa | H Armin");
@@ -367,17 +376,22 @@ namespace TitansMod
             return result;
         }
 
-        private void AddHookCollider(Titan t, string bone, float radius, float height)
+        // radius/height em metros no mundo; dividimos pela escala acumulada do osso (rigs do Blender têm escala 0.01/100)
+        private void AddHookCollider(Titan t, string bone, float radiusM, float heightM)
         {
             var b = t.boneTr[TitanPack.Loaded.FindBone(bone)];
             if (b == null) return;
             var go = new GameObject("TITANCOL_" + bone);
             go.transform.SetParent(b, false);
             if (groundLayer >= 0) go.layer = groundLayer;
+            Vector3 ls = b.lossyScale;
+            float s = Mathf.Max(0.000001f, (Mathf.Abs(ls.x) + Mathf.Abs(ls.y) + Mathf.Abs(ls.z)) / 3f);
             var c = go.AddComponent<CapsuleCollider>();
-            c.radius = radius;
-            c.height = height;
+            c.radius = radiusM / s;
+            c.height = heightM / s;
             c.direction = 1; // eixo Y do osso
+            // centro no meio do osso (ossos do Blender apontam pro +Y a partir da cabeça do osso)
+            c.center = new Vector3(0f, (heightM * 0.45f) / s, 0f);
         }
 
         private GameObject Part(Titan t, Transform parent, PrimitiveType prim, Vector3 pos, Vector3 scl, Color c, bool isSkin = true)
@@ -447,21 +461,21 @@ namespace TitansMod
             root.transform.localScale = Vector3.one * (desired / span);
             foreach (var s in skins) { s.Apply(); s.RefreshBounds(); }
 
-            // colisores pros ganchos do ODM grudarem no corpo (tamanhos proporcionais ao modelo nativo)
+            // colisores pros ganchos do ODM grudarem no corpo (tamanhos em METROS, convertidos pela escala real do osso)
             try
             {
-                float u = span;
-                AddHookCollider(t, "hip", u * 0.16f, u * 0.3f);
-                AddHookCollider(t, "chest", u * 0.15f, u * 0.3f);
-                AddHookCollider(t, "head", u * 0.11f, u * 0.2f);
-                AddHookCollider(t, "thigh.L", u * 0.08f, u * 0.3f);
-                AddHookCollider(t, "thigh.R", u * 0.08f, u * 0.3f);
-                AddHookCollider(t, "shin.L", u * 0.06f, u * 0.3f);
-                AddHookCollider(t, "shin.R", u * 0.06f, u * 0.3f);
-                AddHookCollider(t, "upper_arm.L", u * 0.06f, u * 0.25f);
-                AddHookCollider(t, "upper_arm.R", u * 0.06f, u * 0.25f);
-                AddHookCollider(t, "forearm.L", u * 0.05f, u * 0.22f);
-                AddHookCollider(t, "forearm.R", u * 0.05f, u * 0.22f);
+                float h = desired;
+                AddHookCollider(t, "hip", h * 0.11f, h * 0.22f);
+                AddHookCollider(t, "chest", h * 0.11f, h * 0.24f);
+                AddHookCollider(t, "head", h * 0.08f, h * 0.16f);
+                AddHookCollider(t, "thigh.L", h * 0.055f, h * 0.24f);
+                AddHookCollider(t, "thigh.R", h * 0.055f, h * 0.24f);
+                AddHookCollider(t, "shin.L", h * 0.045f, h * 0.24f);
+                AddHookCollider(t, "shin.R", h * 0.045f, h * 0.24f);
+                AddHookCollider(t, "upper_arm.L", h * 0.04f, h * 0.2f);
+                AddHookCollider(t, "upper_arm.R", h * 0.04f, h * 0.2f);
+                AddHookCollider(t, "forearm.L", h * 0.035f, h * 0.18f);
+                AddHookCollider(t, "forearm.R", h * 0.035f, h * 0.18f);
             }
             catch (Exception e) { LoggerInstance.Warning("colliders: " + e.Message); }
             t.height = (kind == TitanKind.Crawler ? 0.62f : 1f) * desired;
@@ -490,24 +504,7 @@ namespace TitansMod
             }
             catch { }
 
-            if (cfgShowNape.Value && kind != TitanKind.Ally && t.napeAnchor != null)
-            {
-                var glow = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-                var col = glow.GetComponent<Collider>();
-                if (col != null) Object.Destroy(col);
-                glow.name = "nape_glow";
-                glow.transform.SetParent(t.napeAnchor, false);
-                glow.transform.localScale = Vector3.one * Mathf.Max(0.05f, span * 0.03f);
-                try
-                {
-                    var m = glow.GetComponent<Renderer>().material;
-                    m.color = new Color(1f, 0.1f, 0.1f);
-                    m.EnableKeyword("_EMISSION");
-                    m.SetColor("_EmissionColor", new Color(1.6f, 0.12f, 0.12f));
-                }
-                catch { }
-                t.napeMarker = glow;
-            }
+            // modelo real não usa marcador na nuca: a nuca é o alvo clássico, todo mundo sabe onde é
             return t;
         }
 
@@ -933,7 +930,8 @@ namespace TitansMod
                 t.nextWanderTurn = Time.time + 4f + (float)rng.NextDouble() * 5f;
             }
             if (t.usesPack) t.anim.Play(t.kind == TitanKind.Crawler ? "crawler.run" : "run.walk", true);
-            t.tr.rotation = Quaternion.Slerp(t.tr.rotation, Quaternion.Euler(0f, t.wanderHeading, 0f), 1.2f * dt);
+            if (Time.time >= t.avoidUntil)
+                t.tr.rotation = Quaternion.Slerp(t.tr.rotation, Quaternion.Euler(0f, t.wanderHeading, 0f), 1.2f * dt);
             Step(t, t.speed * 0.35f * t.speedMul, dt);
         }
 
@@ -941,7 +939,8 @@ namespace TitansMod
         {
             if (dist < 0.5f) return;
             Vector3 dir = to / dist;
-            t.tr.rotation = Quaternion.Slerp(t.tr.rotation, Quaternion.LookRotation(dir), 2.4f * dt);
+            if (Time.time >= t.avoidUntil)
+                t.tr.rotation = Quaternion.Slerp(t.tr.rotation, Quaternion.LookRotation(dir), 2.4f * dt);
 
             // ação em andamento (rugido/swing): só gira, não anda
             if (t.usesPack && Time.time < t.actionUntil) return;
@@ -998,8 +997,85 @@ namespace TitansMod
             }
         }
 
+        // Obstáculo na frente (parede/casa/árvore)? Ignora chão, rampas, titãs e jogadores.
+        private bool PathBlocked(Titan t, Vector3 dir, float dist, out RaycastHit blocker)
+        {
+            blocker = new RaycastHit();
+            Vector3 origin = t.tr.position + Vector3.up * t.height * 0.45f;
+            var hits = Physics.RaycastAll(origin, dir, dist);
+            float best = float.MaxValue; bool found = false;
+            foreach (var h in hits)
+            {
+                if (h.collider == null || h.collider.isTrigger) continue;
+                var r = h.collider.transform.root;
+                if (r != null && r.name.StartsWith("TITAN")) continue;
+                if (h.normal.y > 0.6f) continue; // chão / rampa
+                bool isPlayer = false;
+                foreach (var p in players) if ((p.pos - h.point).sqrMagnitude < 9f) { isPlayer = true; break; }
+                if (isPlayer) continue;
+                if (h.distance < best) { best = h.distance; blocker = h; found = true; }
+            }
+            return found;
+        }
+
+        // Quebra objetos pequenos (cercas, barracas, casinhas): some com vapor/poeira. Nunca terreno.
+        private bool TryBreak(Titan t, RaycastHit hit)
+        {
+            if (t.state != TitanState.Chase || t.kind == TitanKind.Crawler) return false;
+            var go = hit.collider.gameObject;
+            string n = (go.name + "/" + (go.transform.parent != null ? go.transform.parent.name : "")).ToLowerInvariant();
+            if (n.Contains("terrain") || n.Contains("ground") || n.Contains("floor") || n.Contains("road") || n.Contains("street")
+                || n.Contains("boundary") || n.Contains("ceiling") || n.Contains("map") || n.Contains("water")) return false;
+            Bounds b = hit.collider.bounds;
+            if (b.size.y > t.height * 0.9f || b.size.magnitude > t.height * 2.2f) return false;
+            try
+            {
+                go.SetActive(false);
+                SteamBurst(b.center, Mathf.Max(2f, b.size.magnitude * 0.35f), 12);
+                PlaySfx(t, clipStomp, 1f, 0.3f);
+                Say(KindName(t.kind) + " destruiu " + go.name + "!");
+                return true;
+            }
+            catch { return false; }
+        }
+
+        private void AvoidObstacles(Titan t, float speed)
+        {
+            if (Time.time < t.avoidUntil) return;
+            float look = Mathf.Max(t.height * 0.45f, speed * 0.7f);
+            RaycastHit hit;
+            if (!PathBlocked(t, t.tr.forward, look, out hit)) return;
+
+            if (TryBreak(t, hit)) return;
+
+            if (t.kind == TitanKind.Jumper && Time.time - t.lastLeap > 3f && t.state == TitanState.Chase)
+            {
+                t.lastLeap = Time.time;
+                t.wanderHeading = t.tr.eulerAngles.y;
+                SetState(t, TitanState.Leap);
+                return;
+            }
+
+            float[] angs = { 45f, -45f, 90f, -90f, 135f, -135f };
+            float chosen = 180f;
+            foreach (var a in angs)
+            {
+                Vector3 d = Quaternion.Euler(0f, a, 0f) * t.tr.forward;
+                RaycastHit dummy;
+                if (!PathBlocked(t, d, look, out dummy)) { chosen = a; break; }
+            }
+            t.avoidHeading = t.tr.eulerAngles.y + chosen;
+            t.avoidUntil = Time.time + 1.3f;
+        }
+
         private void Step(Titan t, float speed, float dt)
         {
+            AvoidObstacles(t, speed);
+            if (Time.time < t.avoidUntil)
+            {
+                t.tr.rotation = Quaternion.Slerp(t.tr.rotation, Quaternion.Euler(0f, t.avoidHeading, 0f), 4f * dt);
+                if (t.state == TitanState.Leap) return;
+            }
             Vector3 next = t.tr.position + t.tr.forward * speed * dt;
             next = GroundAt(next, t.tr.position.y + 2f);
             if (next.y > t.tr.position.y + 4f) next.y = t.tr.position.y;

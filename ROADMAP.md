@@ -18,9 +18,12 @@ Pegar a melhor movimentação ODM que existe (RAOT) e construir em cima dela o j
 Bugs reportados pelo Jeff em 2026-10-15:
 - [x] Causa da escala absurda achada (altura medida pré-skinning, 0.34 → fator ~50x). Correção: medir pós-skinning. (código pronto, falta build+teste)
 - [x] Causa da cabeça invisível achada (frustum culling por bounds errados da malha). Correção: RecalculateBounds pós-pose. (código pronto, falta build+teste)
-- [ ] Ganchos do ODM grudarem no corpo do titã (colliders nos ossos principais com a layer certa; cuidado: raycast de chão do próprio mod não pode acertar titã).
-- [ ] F11 "céu livre": desligar tetos/limites invisíveis dos mapas (colliders com nomes MapCeiling, ForestCeiling, CeilingPadding, High/Low/Near/Far Boundary etc.).
-- [ ] Calibrar: altura padrão do titã (alvo: ~7 jogadores ≈ 12m), alcance de patada/agarrão, posição do brilho da nuca no modelo real.
+- [x] Ganchos do ODM grudarem no corpo do titã (colliders em 11 ossos, layer do chão; raycast de chão do mod ignora titãs). Rodada 2: tamanhos convertidos pra METROS via lossyScale (rig Blender tem escala acumulada; colliders gigantes prendiam o jogador em cima do titã).
+- [x] F11 "céu livre" (desliga colliders ceiling/boundary/barrier/killbound; religa no 2º toque).
+- [x] Bola vermelha da nuca removida do modelo real (alvo é conhecido).
+- [ ] Rosto/boca/expressão: a textura do AoTTG2 TEM rosto, olhos e dentes; o corpo saiu liso = textura não aplicada. Instrumentado auto-teste no boot (decodificação PNG + shader); corrigir conforme o log.
+- [ ] Atravessar casas/árvores: implementado desvio por raycast no peito (contorna), saltador pula, e durante a caça quebra objetos pequenos (cerca, barraca, casinha < 90% da altura; nunca terreno/estrada). Validar no City e Forest.
+- [ ] Calibrar: altura padrão (~7 jogadores ≈ 12m), alcance de patada/agarrão.
 **Aceite:** 15 min de sessão com waves sem nenhum bug visual; titã parece nativo do jogo; gancho gruda; dá pra voar sem teto.
 
 ### F1 — Experiência de caça completa

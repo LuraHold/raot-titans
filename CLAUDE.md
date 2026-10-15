@@ -16,6 +16,15 @@ dotnet build -c Release
 copy bin\Release\net472\Titans.dll X:\Downloads\raot_2.086_windows\Mods\
 ```
 
+## F0 em andamento (2026-10-15, tarde) — lições
+- **BoneWeight[] não passa no interop** do Unhollower → skinning por CPU (`CpuSkin`), MeshFilter/MeshRenderer em vez de SMR.
+- **Altura**: medir dos vértices skinnados (pré-skinning dava 0.34 e explodia a escala 50x). cfgScale = altura em "jogadores" (1.7m).
+- **Cabeça sumia** = frustum culling (bounds da pose crua) → RecalculateBounds pós-pose.
+- **Colliders de gancho** em metros / lossyScale do osso (rig Blender tem escala acumulada; sem isso viravam gigantes e prendiam o jogador).
+- **Textura lisa (sem rosto)**: PNG decodifica e UVs estão certos; o Standard do RAOT só tem variantes sem textura (jogo chapado). Solução: copiar o shader de um material texturizado do jogo (SMR dos personagens em partida; fallback: material texturizado mais comum). Confirmar in-game pelo log "shader texturizado".
+- Obstáculos: raycast no peito; contorna / saltador pula / na caça quebra objeto pequeno (<90% da altura, nunca terreno).
+- Bola vermelha da nuca removida; F11 céu livre.
+
 ## v4 (2026-10-15) — TITÃS DE VERDADE (modelos do AoTTG2)
 - **Pipeline de extração** (`titan-extract/` em X:\Downloads\rea-tools, scripts Python + UnityPy): lê o `resources.assets` do AoTTG2 (Unity 2023, em X:\Downloads\rea-tools\aottg2), exporta o prefab **BasicTitan0**: esqueleto 102 transforms, malhas Body/Head com pesos de skin (pesos vêm de `MeshHandler.m_BoneWeights/m_BoneIndices`, NÃO de m_Skin), bindposes, 5 texturas de pele (vanilla/fat/muscle/medium/skinny) e **19 AnimationClips decodificados** (StreamedClip+DenseClip+ConstantClip, bindings casados por CRC32 do caminho do bone — 168/168 ok) baked a 30fps → formato próprio **TPK1** (`assets/titan.tpk`, ~2MB).
 - Rodar de novo se mudar algo: `python export_titan.py` (gera em TitansMod/assets; copiar pra `<jogo>\Mods\TitansAssets\`).

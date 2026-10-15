@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
+using UnhollowerRuntimeLib;
 using Object = UnityEngine.Object;
 
 namespace TitansMod
@@ -149,20 +150,36 @@ namespace TitansMod
         private static Vector3 RV3(BinaryReader r) { return new Vector3(r.ReadSingle(), r.ReadSingle(), r.ReadSingle()); }
         private static Quaternion RQ(BinaryReader r) { return new Quaternion(r.ReadSingle(), r.ReadSingle(), r.ReadSingle(), r.ReadSingle()); }
 
+        public static Action<string> Log = s => { };
+
         public Texture2D GetTexture(string file)
         {
             if (string.IsNullOrEmpty(file)) return null;
             Texture2D t;
             if (texCache.TryGetValue(file, out t)) return t;
+            string path = Path.Combine(dir, file);
             try
             {
-                byte[] data = File.ReadAllBytes(Path.Combine(dir, file));
-                t = new Texture2D(2, 2, TextureFormat.RGBA32, true);
-                ImageConversion.LoadImage(t, data, false);
+                byte[] data = File.ReadAllBytes(path);
+                t = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+                bool ok = false;
+                try { ok = ImageConversion.LoadImage(t, data, false); }
+                catch (Exception e1)
+                {
+                    Log("LoadImage(3 args) falhou: " + e1.Message);
+                    try { ok = ImageConversion.LoadImage(t, data); } catch (Exception e2) { Log("LoadImage(2 args) falhou: " + e2.Message); }
+                }
+                if (!ok || t.width <= 2)
+                {
+                    Log("textura NÃO decodificada: " + file + " (ok=" + ok + ", " + t.width + "x" + t.height + ")");
+                    texCache[file] = null;
+                    return null;
+                }
+                Log("textura ok: " + file + " " + t.width + "x" + t.height);
                 texCache[file] = t;
                 return t;
             }
-            catch { return null; }
+            catch (Exception e) { Log("textura falhou " + file + ": " + e.Message); return null; }
         }
 
         // Monta uma instância: hierarquia de bones + malhas skinnadas por CPU.
@@ -225,10 +242,73 @@ namespace TitansMod
             return 0;
         }
 
+        private static bool loggedShader;
+        private static Shader texturedShader;
+        private static bool texturedShaderSearched;
+
+        // O RAOT é low-poly chapado: o build só traz as variantes SEM textura do Standard.
+        // Então pegamos o shader mais usado pelos materiais que TÊM textura no jogo (personagens).
+        private static Shader FindTexturedShader()
+        {
+            if (texturedShaderSearched) return texturedShader;
+            texturedShaderSearched = true;
+            // 1) personagens em cena (skinned, com certeza texturizados)
+            try
+            {
+                foreach (var o in Object.FindObjectsOfType(Il2CppType.Of<SkinnedMeshRenderer>()))
+                {
+                    var smr = o.TryCast<SkinnedMeshRenderer>();
+                    if (smr == null) continue;
+                    if (smr.transform.root != null && smr.transform.root.name.StartsWith("TITAN")) continue;
+                    var m = smr.sharedMaterial;
+                    if (m == null || m.shader == null) continue;
+                    Texture mt = null;
+                    try { mt = m.mainTexture; } catch { }
+                    if (mt == null) continue;
+                    texturedShader = m.shader;
+                    Log("shader texturizado (personagem): '" + m.shader.name + "'");
+                    return texturedShader;
+                }
+            }
+            catch (Exception e) { Log("FindTexturedShader/smr: " + e.Message); }
+            // 2) material texturizado mais comum carregado
+            try
+            {
+                var counts = new Dictionary<string, int>();
+                var byName = new Dictionary<string, Shader>();
+                var mats = Resources.FindObjectsOfTypeAll(Il2CppType.Of<Material>());
+                foreach (var o in mats)
+                {
+                    var m = o.TryCast<Material>();
+                    if (m == null || m.shader == null) continue;
+                    Texture mt = null;
+                    try { mt = m.mainTexture; } catch { }
+                    if (mt == null) continue;
+                    string n = m.shader.name ?? "";
+                    if (n.Contains("UI") || n.Contains("Sprite") || n.Contains("Particle") || n.Contains("Skybox") || n.Contains("Hidden") || n.Contains("TextMesh")) continue;
+                    int c; counts.TryGetValue(n, out c); counts[n] = c + 1;
+                    byName[n] = m.shader;
+                }
+                string best = null; int bestC = 0;
+                foreach (var kv in counts) if (kv.Value > bestC) { bestC = kv.Value; best = kv.Key; }
+                if (best != null)
+                {
+                    texturedShader = byName[best];
+                    Log("shader texturizado do jogo: '" + best + "' (" + bestC + " materiais)");
+                }
+                else Log("nenhum material texturizado encontrado pra copiar o shader");
+            }
+            catch (Exception e) { Log("FindTexturedShader: " + e.Message); }
+            return texturedShader;
+        }
+
+        // No boot (menu) os materiais dos personagens podem não estar carregados: deixa procurar de novo na partida.
+        public static void ResetShaderCache() { texturedShaderSearched = false; texturedShader = null; loggedShader = false; }
+
         public static Material MakeMaterial(Texture2D tex, Color tint, Material donor)
         {
-            Shader sh = null;
-            try { sh = Shader.Find("Standard"); } catch { }
+            Shader sh = FindTexturedShader();
+            if (sh == null) { try { sh = Shader.Find("Standard"); } catch { } }
             if (sh == null) { try { sh = Shader.Find("Legacy Shaders/Diffuse"); } catch { } }
             if (sh == null) { try { sh = Shader.Find("Diffuse"); } catch { } }
             Material m = null;
@@ -245,8 +325,10 @@ namespace TitansMod
                 catch { }
             }
             if (m == null) throw new Exception("nenhum shader disponível");
-            try { if (tex != null) m.mainTexture = tex; } catch { }
+            try { if (tex != null) m.mainTexture = tex; } catch (Exception e) { Log("mainTexture falhou: " + e.Message); }
+            try { if (tex != null && m.HasProperty("_MainTex")) m.SetTexture("_MainTex", tex); } catch { }
             try { m.color = tint; } catch { }
+            if (!loggedShader) { loggedShader = true; Log("shader do titã: " + (m.shader != null ? m.shader.name : "?") + ", textura " + (tex != null ? "ok" : "NULA")); }
             return m;
         }
     }
