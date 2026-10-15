@@ -215,7 +215,8 @@ namespace TitansMod
         public class Look
         {
             public string body = "Body";       // Body / Body_fat / Body_muscle / Body_medium / Body_skinny
-            public string hair = null;         // Hair_eren / Hair_messy / Hair_long / null
+            public string eyes = "Eyes0";      // Eyes0..Eyes3 (variantes reais do AoTTG2)
+            public string hair = null;         // Hair_M19 / Hair_M20 / Hair_F13 / Hair_F14 / null
             public Color eyeTint = new Color(0.95f, 0.95f, 0.85f);
             public float eyeScale = 1f;
             public Color hairTint = new Color(0.18f, 0.12f, 0.08f);
@@ -272,11 +273,16 @@ namespace TitansMod
             var root = boneTr[0].gameObject;
             skins = new List<CpuSkin>();
 
+            // corpo + cabeça + olhos + cabelo: TODOS skinned por CPU (olhos/cabelo são rígidos ao osso head, bind do head)
             var chosen = new List<MeshDef>();
             var body = FindMesh(look.body) ?? FindMesh("Body");
             var head = FindMesh("Head");
+            var eyes = FindMesh(look.eyes) ?? FindMesh("Eyes0");
+            var hair = look.hair != null ? FindMesh(look.hair) : null;
             if (body != null) chosen.Add(body);
             if (head != null) chosen.Add(head);
+            if (eyes != null) chosen.Add(eyes);
+            if (hair != null) chosen.Add(hair);
 
             foreach (var m in chosen)
             {
@@ -289,34 +295,14 @@ namespace TitansMod
                 var mf = go.AddComponent<MeshFilter>();
                 mf.sharedMesh = mesh;
                 var mr = go.AddComponent<MeshRenderer>();
-                mr.materials = MakeMaterials(m.subs, tint, shaderDonor, null, false);
+                bool isEyes = m.name.StartsWith("Eyes");
+                bool isHair = m.name.StartsWith("Hair");
+                if (isEyes) mr.materials = MakeMaterials(m.subs, look.eyeTint, shaderDonor, null, true);
+                else if (isHair) mr.materials = MakeMaterials(m.subs, look.hairTint, shaderDonor, null, true);
+                else mr.materials = MakeMaterials(m.subs, tint, shaderDonor, null, false);
                 skins.Add(new CpuSkin(m, mesh, go.transform, boneTr));
             }
 
-            // olhos (estáticos no osso Eyes, no espaço local do osso)
-            foreach (var s in statics)
-            {
-                bool isEyes = s.name == "Eyes";
-                bool isHair = look.hair != null && s.name == look.hair;
-                if (!isEyes && !isHair) continue;
-                int pb = FindBone(s.parentBone);
-                var parent = boneTr[pb];
-                var go = new GameObject(s.name + "_mesh");
-                go.transform.SetParent(parent, false);
-                var mesh = MakeUnityMesh(s.verts, s.normals, s.uv, s.subs);
-                go.AddComponent<MeshFilter>().sharedMesh = mesh;
-                var mr = go.AddComponent<MeshRenderer>();
-                if (isEyes)
-                {
-                    mr.materials = MakeMaterials(s.subs, look.eyeTint, shaderDonor, null, true);
-                    go.transform.localScale = Vector3.one * look.eyeScale;
-                }
-                else
-                {
-                    mr.materials = MakeMaterials(s.subs, look.hairTint, shaderDonor, null, true);
-                    FitHair(go.transform, parent, s, head, root.transform);
-                }
-            }
             return root;
         }
 

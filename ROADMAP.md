@@ -27,7 +27,8 @@ Bugs reportados pelo Jeff em 2026-10-15:
 - [ ] Atravessar casas/árvores: implementado desvio por raycast no peito (contorna), saltador pula, e durante a caça quebra objetos pequenos (cerca, barraca, casinha < 90% da altura; nunca terreno/estrada). Validar no City e Forest.
 - [ ] Calibrar: altura padrão (~7 jogadores ≈ 12m), alcance de patada/agarrão.
 - [x] Trampolim/queda infinita: quando o raio de chão não achava nada, `GroundAt` devolvia a altura de referência (`y+2`) e o titã subia 2m por frame. Agora sem chão = desce devagar e dá meia-volta.
-- [x] Olhos: eram malha estática (`eyes_0`) no osso `Eyes`, fora da exportação skinned. TPK2 traz malhas estáticas presas em ossos.
+- [x] Olhos (rodada 2, com REA no AoTTG2): a malha dos olhos está no espaço da MALHA (Z pra cima), não no espaço do osso; pendurar no osso dava olho gigante flutuando. Agora olhos (4 variantes `TitanEyes0-3`) e cabelos (`HairM19/F13/F14`, prefabs feitos pro socket do titã) são malhas skinned RÍGIDAS ao osso `head` com a bindpose do head — mesmo caminho do corpo, sem chute de transform.
+- [x] Colisão com o mapa (com REA no AoTTG2): `BaseTitan` lá é Rigidbody + CapsuleCollider na raiz, gravidade própria, `CheckGround` curto, `JumpForce`. Replicado: titã agora é corpo físico (cápsula do tamanho dele, massa 5000, rotação travada), anda por velocidade, paredes bloqueiam de verdade, salto é impulso físico, detector de "travou" vira o titã. Colisores de gancho nos ossos viraram triggers (gancho pega, não empurra). O raycast de chão antigo ficou só pro fallback de primitivas.
 - [x] Variedade: 5 corpos reais do AoTTG2 (normal/gordo/musculoso/médio/magro) + 3 cabelos (juba do Titã do Eren e 2 cabeleiras) + olhos por variante (corredor: vermelhos e grandes; saltador: amarelos; rastejante: pálidos; normal: sorteio). Validar encaixe do cabelo no City.
 **Aceite:** 15 min de sessão com waves sem nenhum bug visual; titã parece nativo do jogo; gancho gruda; dá pra voar sem teto.
 

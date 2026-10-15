@@ -176,6 +176,160 @@ for go_name, smr_obj in smr_objs:
     })
     print(f"mesh {go_name}: {len(verts)} verts, {len(bind)} bindposes, {len(bone_skel_idx)} bones, submeshes {[(m, len(t)) for m, t in submeshes]}")
 
+# ---------- 2b. corpos das variantes (BasicTitan1..4) mapeados pro esqueleto do BasicTitan0 por NOME de osso ----------
+bone_index_by_name = {b["name"]: i for i, b in enumerate(bones)}
+VARIANT_PREFABS = {"Body_fat": 15427, "Body_muscle": 15678, "Body_medium": 15679, "Body_skinny": 14732}
+
+def find_smr_in_prefab(pid, go_name):
+    """acha o SMR chamado go_name (Body/Head) no prefab pid"""
+    found = []
+    def w(go_obj):
+        go = go_obj.read()
+        tr = None
+        for c in go.m_Component:
+            co = deref(c.component)
+            if co is None: continue
+            if co.type.name == "Transform": tr = co
+            if co.type.name == "SkinnedMeshRenderer" and go.m_Name == go_name:
+                found.append(co)
+        if tr:
+            for ch in tr.read().m_Children:
+                cho = deref(ch)
+                if cho is None: continue
+                chgo = deref(cho.read().m_GameObject)
+                if chgo is not None: w(chgo)
+    w(byid[pid])
+    return found[0] if found else None
+
+for vname, vpid in VARIANT_PREFABS.items():
+    smr_obj = find_smr_in_prefab(vpid, "Body")
+    if smr_obj is None:
+        print("variante sem Body:", vname); continue
+    smr = smr_obj.read()
+    mesh_obj = deref(smr.m_Mesh)
+    mesh = mesh_obj.read()
+    mh = MeshHandler(mesh); mh.process()
+    verts = flat_to_tuples(mh.m_Vertices, 3)
+    norms = flat_to_tuples(mh.m_Normals, 3) or [(0,1,0)]*len(verts)
+    uv = flat_to_tuples(mh.m_UV0, 2) or [(0,0)]*len(verts)
+    mw = getattr(mh, "m_BoneWeights", None); mi = getattr(mh, "m_BoneIndices", None)
+    weights = [tuple(zip(list(i)[:4], list(w)[:4])) for w, i in zip(mw, mi)] if (mw and mi) else [((0,1.0),(0,0.0),(0,0.0),(0,0.0))]*len(verts)
+    bind = [tuple(getattr(m, f"e{r}{c}", 0.0) for r in range(4) for c in range(4)) if hasattr(m, "e00") else tuple(m) for m in (mesh.m_BindPose or [])]
+    bone_skel_idx = []
+    for bp in smr.m_Bones:
+        to = deref(bp)
+        tname = deref(to.read().m_GameObject).read().m_Name if to is not None else ""
+        bone_skel_idx.append(bone_index_by_name.get(tname, 0))
+    idx_buf = list(mh.m_IndexBuffer)
+    submeshes = []
+    mats = list(smr.m_Materials)
+    for si, sm in enumerate(mesh.m_SubMeshes):
+        first = sm.firstByte // 2 if getattr(sm, "indexFormat", 0) == 0 else sm.firstByte // 4
+        tri = idx_buf[first:first + sm.indexCount]
+        mat_name = ""
+        if si < len(mats):
+            mo = deref(mats[si])
+            if mo is not None: mat_name = read_material(mo)
+        submeshes.append((mat_name, tri))
+    meshes.append({"name": vname, "verts": verts, "normals": norms, "uv": uv, "weights": weights,
+                   "bindposes": bind, "boneIdx": bone_skel_idx, "submeshes": submeshes})
+    print(f"variante {vname}: {len(verts)} verts, mesh {mesh.m_Name}, mats {[m for m,_ in submeshes]}")
+
+# ---------- 2c. olhos e cabelos como malhas skinned RÍGIDAS ao osso 'head' ----------
+# Verdade do prefab (REA): a malha dos olhos está no MESMO espaço da malha da cabeça (Blender, Z pra cima).
+# Então o caminho certo é: v_world = W_head * bind_head * v  (igual ao corpo), com 100% do peso no osso head.
+import numpy as np
+static_meshes = []  # mantido vazio (formato TPK2 ainda escreve a seção)
+
+head_mesh = [m for m in meshes if m["name"] == "Head"][0]
+head_bone_skel = bone_index_by_name["head"]
+head_local_idx = head_mesh["boneIdx"].index(head_bone_skel)
+bind_head = head_mesh["bindposes"][head_local_idx]
+hv = np.array(head_mesh["verts"]); hmin, hmax = hv.min(0), hv.max(0)
+print("cabeça (espaço da malha): min", np.round(hmin,3), "max", np.round(hmax,3))
+
+def rigid_mesh(name, verts, norms, uv, submeshes):
+    n = len(verts)
+    meshes.append({"name": name, "verts": verts, "normals": norms, "uv": uv,
+                   "weights": [((0, 1.0), (0, 0.0), (0, 0.0), (0, 0.0))] * n,
+                   "bindposes": [bind_head], "boneIdx": [head_bone_skel], "submeshes": submeshes})
+
+def mesh_by_name(mesh_name):
+    for o in env.objects:
+        if o.type.name == "Mesh":
+            try:
+                if o.read().m_Name == mesh_name: return o
+            except Exception: pass
+    return None
+
+def read_mesh_arrays(mo):
+    mesh = mo.read(); mh = MeshHandler(mesh); mh.process()
+    verts = flat_to_tuples(mh.m_Vertices, 3)
+    norms = flat_to_tuples(mh.m_Normals, 3) or [(0,1,0)]*len(verts)
+    uv = flat_to_tuples(mh.m_UV0, 2) or [(0,0)]*len(verts)
+    idx_buf = list(mh.m_IndexBuffer); subs = []
+    for sm in mesh.m_SubMeshes:
+        first = sm.firstByte // 2 if getattr(sm, "indexFormat", 0) == 0 else sm.firstByte // 4
+        subs.append(idx_buf[first:first + sm.indexCount])
+    return verts, norms, uv, subs
+
+# olhos: 4 variantes
+eyes_mat = None
+for o in env.objects:
+    if o.type.name == "Material":
+        try:
+            if o.read().m_Name == "TitanEyesMat": eyes_mat = o; break
+        except Exception: pass
+eyes_mat_name = read_material(eyes_mat) if eyes_mat else "TitanEyesMat"
+for i, mesh_name in enumerate(["eyes_0", "eyes_1", "eyes_3", "eyes_4"]):
+    mo = mesh_by_name(mesh_name)
+    if mo is None: print("olhos não achados:", mesh_name); continue
+    verts, norms, uv, subs = read_mesh_arrays(mo)
+    ev = np.array(verts, dtype=np.float64)
+    if i == 0:
+        ref_min, ref_max = ev.min(0), ev.max(0)
+    else:
+        # variantes autoradas em outra escala: normaliza largura e centro pros olhos 0
+        vmin, vmax = ev.min(0), ev.max(0)
+        sc = (ref_max[0] - ref_min[0]) / max(1e-6, vmax[0] - vmin[0])
+        ev = ev * sc
+        vmin, vmax = ev.min(0), ev.max(0)
+        ev += (ref_min + ref_max) / 2 - (vmin + vmax) / 2
+        verts = [tuple(x) for x in ev]
+    print(f"Eyes{i} ({mesh_name}): {len(verts)} verts, bounds min {np.round(ev.min(0),3)} max {np.round(ev.max(0),3)}")
+    rigid_mesh(f"Eyes{i}", verts, norms, uv, [(eyes_mat_name, tri) for tri in subs])
+
+# cabelos: prefabs HairM/HairF são autorados em outro espaço (escala 100, -90° X). Encaixe por bounds no espaço da malha:
+# Z pra cima, frente = -Y (convenção Blender), largura casa com a cabeça, base no topo da cabeça.
+hair_mat = None
+for o in env.objects:
+    if o.type.name == "Material":
+        try:
+            if o.read().m_Name == "TitanHairMat": hair_mat = o; break
+        except Exception: pass
+hair_mat_name = read_material(hair_mat) if hair_mat else "TitanHairMat"
+head_w = hmax[0] - hmin[0]; head_h = hmax[2] - hmin[2]
+head_center_xy = ((hmin[0] + hmax[0]) / 2, (hmin[1] + hmax[1]) / 2)
+for hname, mesh_name in {"Hair_M19": "HairM19", "Hair_M20": "HairM20", "Hair_F13": "HairF13", "Hair_F14": "HairF14"}.items():
+    mo = mesh_by_name(mesh_name)
+    if mo is None: print("cabelo não achado:", mesh_name); continue
+    verts, norms, uv, subs = read_mesh_arrays(mo)
+    v = np.array(verts, dtype=np.float64)
+    # prefab: rot -90° em X (Blender Y-up->Z-up já é o espaço da malha; prefab roda pra Unity). Mantemos como está (Z-up).
+    vmin, vmax = v.min(0), v.max(0)
+    hair_w = max(1e-6, vmax[0] - vmin[0])
+    s = head_w * 1.08 / hair_w
+    v = v * s
+    vmin, vmax = v.min(0), v.max(0)
+    # base do cabelo (25% a partir do fundo) vai no topo da cabeça menos 18% da altura da cabeça
+    base_z = vmin[2] + (vmax[2] - vmin[2]) * 0.25
+    target_z = hmax[2] - head_h * 0.18
+    v[:, 0] += head_center_xy[0] - (vmin[0] + vmax[0]) / 2
+    v[:, 1] += head_center_xy[1] - (vmin[1] + vmax[1]) / 2
+    v[:, 2] += target_z - base_z
+    print(f"{hname}: {len(verts)} verts, escala {s:.3f}, bounds min {np.round(v.min(0),3)} max {np.round(v.max(0),3)}")
+    rigid_mesh(hname, [tuple(x) for x in v], norms, uv, [(hair_mat_name, tri) for tri in subs])
+
 # texturas extras de variantes de corpo (pro mod trocar a skin)
 for mat_pid_name in ["TitanBody1Mat", "TitanBody2Mat", "TitanBody3Mat", "TitanBody4Mat", "TitanBody5Mat"]:
     for o in env.objects:
@@ -307,7 +461,7 @@ def wstr(f, s):
 
 out_path = os.path.join(OUT, "titan.tpk")
 with open(out_path, "wb") as f:
-    f.write(b"TPK1")
+    f.write(b"TPK2")
     # esqueleto
     f.write(struct.pack("<i", len(bones)))
     for b in bones:
@@ -329,6 +483,19 @@ with open(out_path, "wb") as f:
         for bi in m["boneIdx"]: f.write(struct.pack("<H", bi))
         f.write(struct.pack("<i", len(m["bindposes"])))
         for bp in m["bindposes"]: f.write(struct.pack("<16f", *bp))
+        f.write(struct.pack("<i", len(m["submeshes"])))
+        for mat, tri in m["submeshes"]:
+            wstr(f, mat)
+            f.write(struct.pack("<i", len(tri)))
+            for ix in tri: f.write(struct.pack("<i", int(ix)))
+    # malhas estáticas (TPK2)
+    f.write(struct.pack("<i", len(static_meshes)))
+    for m in static_meshes:
+        wstr(f, m["name"]); wstr(f, m["parent"])
+        f.write(struct.pack("<i", len(m["verts"])))
+        for v in m["verts"]: f.write(struct.pack("<3f", *v))
+        for v in m["normals"]: f.write(struct.pack("<3f", *v))
+        for v in m["uv"]: f.write(struct.pack("<2f", *v[:2]))
         f.write(struct.pack("<i", len(m["submeshes"])))
         for mat, tri in m["submeshes"]:
             wstr(f, mat)

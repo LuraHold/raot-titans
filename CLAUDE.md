@@ -16,6 +16,9 @@ dotnet build -c Release
 copy bin\Release\net472\Titans.dll X:\Downloads\raot_2.086_windows\Mods\
 ```
 
+## Referência obrigatória: dump do AoTTG2
+`X:\Downloads\rea-tools\aottg2-dump\dump.cs` (Il2CppDumper no GameAssembly do AoTTG2). Antes de inventar mecânica de titã, LER como o AoTTG2 faz: `BaseCharacter` (física, GroundMask, SetKinematic), `BaseTitan` (Run/Walk/Jump/Grab/Eat, StateAction, DisableArm, CheckGround, TitanColliderToggler), `BasicTitanSetup` (olhos/cabelo por variante). Lição do Jeff: 2 tentativas falhas = parar e pesquisar a referência.
+
 ## Formato TPK2 (2026-10-15, fim da tarde)
 `assets/titan.tpk` agora é **TPK2**: esqueleto + malhas skinned (Body, Body_fat, Body_muscle, Body_medium, Body_skinny, Head) + malhas estáticas presas em ossos (Eyes→`Eyes`, Hair_eren/Hair_messy/Hair_long→`HairSocket`) + materiais + 19 clips. O loader recusa TPK1. `TitanPack.Look` escolhe corpo/cabelo/olhos por variante. Sons em `assets/sfx/*.wav` (24 do AoTTG2) via `TitanSfx`.
 

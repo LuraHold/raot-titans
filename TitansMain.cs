@@ -62,6 +62,11 @@ namespace TitansMod
             public float avoidHeading;     // rumo de desvio de obstáculo
             public float avoidUntil;
             // sistema de golpe REAL do jogo
+            // física real (igual ao AoTTG2: Rigidbody + cápsula na raiz)
+            public Rigidbody rb;
+            public CapsuleCollider capsule;
+            public float stuckTime;
+            public Vector3 lastPos;
             public Strikeable strikeable;
             public StrikePoint[] points;   // 0 nuca, 1 pulso L, 2 pulso R, 3 joelho L, 4 joelho R
             public float[] baseRadii;
@@ -357,7 +362,9 @@ namespace TitansMod
 
             var t = BuildTitan(kind, scale, skin);
             t.speed = speed * UnityEngine.Random.Range(0.85f, 1.2f);
-            t.tr.position = spawnPos;
+            t.tr.position = spawnPos + Vector3.up * 0.3f;
+            t.lastPos = t.tr.position;
+            if (t.rb != null) { try { t.rb.position = t.tr.position; } catch { } }
             Vector3 look = player.position - spawnPos; look.y = 0f;
             if (look.sqrMagnitude > 0.01f) t.tr.rotation = Quaternion.LookRotation(look);
             t.state = kind == TitanKind.Ally ? TitanState.Chase : TitanState.Wander;
@@ -499,6 +506,7 @@ namespace TitansMod
             c.radius = radiusM / s;
             c.height = heightM / s;
             c.direction = 1; // eixo Y do osso
+            c.isTrigger = true; // gancho acerta (raycast pega trigger), mas não empurra o mundo nem prende o jogador
             // centro no meio do osso (ossos do Blender apontam pro +Y a partir da cabeça do osso)
             c.center = new Vector3(0f, (heightM * 0.45f) / s, 0f);
         }
@@ -546,29 +554,29 @@ namespace TitansMod
             switch (kind)
             {
                 case TitanKind.Runner:
-                    look.body = "Body_skinny"; look.hair = null;
-                    look.eyeTint = new Color(1f, 0.15f, 0.1f); look.eyeScale = 1.45f;
+                    look.body = "Body_skinny"; look.hair = null; look.eyes = "Eyes1";
+                    look.eyeTint = new Color(1f, 0.15f, 0.1f); // o psicopata
                     break;
                 case TitanKind.Jumper:
-                    look.body = "Body_muscle"; look.hair = "Hair_eren";
-                    look.eyeTint = new Color(1f, 0.85f, 0.2f); look.eyeScale = 1.15f;
+                    look.body = "Body_muscle"; look.hair = "Hair_M19"; look.eyes = "Eyes2";
+                    look.eyeTint = new Color(1f, 0.85f, 0.2f);
                     break;
                 case TitanKind.Crawler:
-                    look.body = "Body_fat"; look.hair = null;
-                    look.eyeTint = new Color(0.7f, 0.9f, 1f); look.eyeScale = 0.8f;
+                    look.body = "Body_fat"; look.hair = null; look.eyes = "Eyes3";
+                    look.eyeTint = new Color(0.7f, 0.9f, 1f);
                     break;
                 case TitanKind.Ally:
-                    look.body = "Body_muscle"; look.hair = "Hair_messy";
+                    look.body = "Body_muscle"; look.hair = "Hair_F14"; look.eyes = "Eyes0";
                     look.eyeTint = new Color(0.6f, 0.8f, 1f); look.tint = new Color(0.55f, 0.7f, 1f);
                     break;
                 default:
                     {
                         int r = rng.Next(4);
                         look.body = r == 0 ? "Body_medium" : (r == 1 ? "Body_fat" : "Body");
-                        int h = rng.Next(5);
-                        look.hair = h == 0 ? "Hair_messy" : (h == 1 ? "Hair_long" : null);
+                        string[] hairs = { "Hair_M19", "Hair_F13", "Hair_F14", null, null };
+                        look.hair = hairs[rng.Next(hairs.Length)];
+                        look.eyes = "Eyes" + rng.Next(4);
                         look.eyeTint = rng.Next(3) == 0 ? new Color(1f, 1f, 0.6f) : new Color(0.95f, 0.95f, 0.85f);
-                        look.eyeScale = 0.9f + (float)rng.NextDouble() * 0.4f;
                         look.hairTint = rng.Next(2) == 0 ? new Color(0.18f, 0.12f, 0.08f) : new Color(0.08f, 0.07f, 0.06f);
                     }
                     break;
@@ -609,6 +617,29 @@ namespace TitansMod
                 AddHookCollider(t, "forearm.R", h * 0.035f, h * 0.18f);
             }
             catch (Exception e) { LoggerInstance.Warning("colliders: " + e.Message); }
+
+            // corpo físico (referência: BaseTitan do AoTTG2 = Rigidbody + CapsuleCollider na raiz, gravidade própria)
+            try
+            {
+                float s = root.transform.localScale.x;
+                var cap = root.AddComponent<CapsuleCollider>();
+                float capH = t.height, capR = t.height * (kind == TitanKind.Crawler ? 0.3f : 0.17f);
+                cap.height = capH / s;
+                cap.radius = capR / s;
+                cap.center = new Vector3(0f, capH * 0.5f / s, 0f);
+                cap.direction = 1;
+                if (groundLayer >= 0) root.layer = groundLayer;
+                var rb = root.AddComponent<Rigidbody>();
+                rb.mass = 5000f;
+                rb.drag = 0.5f;
+                rb.angularDrag = 10f;
+                rb.useGravity = true;
+                rb.freezeRotation = true;
+                rb.interpolation = RigidbodyInterpolation.Interpolate;
+                rb.collisionDetectionMode = CollisionDetectionMode.Continuous;
+                t.rb = rb; t.capsule = cap;
+            }
+            catch (Exception e) { LoggerInstance.Warning("rigidbody: " + e.Message); }
             t.height = (kind == TitanKind.Crawler ? 0.62f : 1f) * desired;
 
             // âncoras nos hitboxes/sockets reais do rig do AoTTG2
@@ -925,6 +956,12 @@ namespace TitansMod
                     if (t.skins != null)
                         foreach (var s in t.skins) s.Apply();
                 }
+                if (t.rb != null && !t.rb.isKinematic)
+                {
+                    // gravidade reforçada (titã de 12m não pode flutuar) e freio horizontal por padrão; Step() reaplica se andar
+                    t.rb.AddForce(Vector3.down * 18f, ForceMode.Acceleration);
+                    if (t.state != TitanState.Leap) t.rb.velocity = new Vector3(0f, t.rb.velocity.y, 0f);
+                }
 
                 // patada agendada (sincronizada com a animação de swing)
                 if (t.pendingPushAt > 0f && Time.time >= t.pendingPushAt)
@@ -1044,6 +1081,17 @@ namespace TitansMod
                     if (t.usesPack) t.anim.Play("Titanjumping", false);
                     Vector3 dir = Quaternion.Euler(0f, t.wanderHeading, 0f) * Vector3.forward;
                     float tt = t.stateTime;
+                    if (t.rb != null)
+                    {
+                        // salto físico: impulso no início, gravidade faz o resto; aterrissa quando encosta no chão
+                        if (tt < dt * 1.5f) t.rb.velocity = dir * t.speed * 2.6f + Vector3.up * 17f;
+                        if (tt > 0.35f && IsGrounded(t))
+                        {
+                            Voice(t, "step", clipStomp, 1f, 0.45f);
+                            SetState(t, TitanState.Chase);
+                        }
+                        continue;
+                    }
                     t.tr.position += dir * t.speed * 3.2f * dt + Vector3.up * (9f - 18f * tt) * dt;
                     Vector3 g = GroundAt(t.tr.position, targetPos.y);
                     if (tt > 0.25f && t.tr.position.y <= g.y + 0.1f)
@@ -1225,6 +1273,19 @@ namespace TitansMod
             t.avoidUntil = Time.time + 1.3f;
         }
 
+        private bool IsGrounded(Titan t)
+        {
+            var hits = Physics.RaycastAll(t.tr.position + Vector3.up * 0.6f, Vector3.down, 1.4f);
+            foreach (var h in hits)
+            {
+                if (h.collider == null || h.collider.isTrigger) continue;
+                var r = h.collider.transform.root;
+                if (r != null && r.name.StartsWith("TITAN")) continue;
+                return true;
+            }
+            return false;
+        }
+
         private void Step(Titan t, float speed, float dt)
         {
             AvoidObstacles(t, speed);
@@ -1233,6 +1294,34 @@ namespace TitansMod
                 t.tr.rotation = Quaternion.Slerp(t.tr.rotation, Quaternion.Euler(0f, t.avoidHeading, 0f), 4f * dt);
                 if (t.state == TitanState.Leap) return;
             }
+
+            if (t.rb != null)
+            {
+                // movimento por física: paredes bloqueiam de verdade, gravidade cuida do chão
+                Vector3 v = t.tr.forward * speed;
+                v.y = t.rb.velocity.y;
+                t.rb.velocity = v;
+
+                // travou (parede/beco)? vira
+                float moved = (t.tr.position - t.lastPos).magnitude;
+                t.lastPos = t.tr.position;
+                if (moved < speed * dt * 0.25f) { t.stuckTime += dt; }
+                else t.stuckTime = 0f;
+                if (t.stuckTime > 1.2f)
+                {
+                    t.stuckTime = 0f;
+                    t.avoidHeading = t.tr.eulerAngles.y + (rng.Next(2) == 0 ? 110f : -110f);
+                    t.avoidUntil = Time.time + 1.3f;
+                }
+
+                t.bobPhase += dt * Mathf.Max(3f, speed * 1.1f);
+                float sw = Mathf.Sin(t.bobPhase);
+                if (t.lastStepSign != 0f && Mathf.Sign(sw) != t.lastStepSign)
+                    Voice(t, "step", clipStomp, Mathf.Clamp01(t.scale / 10f), 0.35f + (float)rng.NextDouble() * 0.15f);
+                t.lastStepSign = Mathf.Sign(sw);
+                return;
+            }
+
             Vector3 next = t.tr.position + t.tr.forward * speed * dt;
             bool grounded;
             Vector3 g = GroundAt(next, t.tr.position.y + 2f, out grounded);
@@ -1381,6 +1470,7 @@ namespace TitansMod
             if (t.napeMarker != null) { try { Object.Destroy(t.napeMarker); } catch { } t.napeMarker = null; }
             SetPointsTargetable(t, false);
             Voice(t, "death", clipSteam, 1f, 0.6f);
+            if (t.rb != null) { try { t.rb.velocity = Vector3.zero; t.rb.isKinematic = true; } catch { } }
             SetState(t, TitanState.Dying);
             if (t.usesPack)
                 t.anim.Play(t.kind == TitanKind.Crawler ? "crawler.die" : (rng.Next(2) == 0 ? "die.front" : "die.back"), false);
