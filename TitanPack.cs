@@ -24,12 +24,14 @@ namespace TitansMod
             public Matrix4x4[] bindposes;
             public SubDef[] subs;
         }
+        public class StaticDef { public string name, parentBone; public Vector3[] verts, normals; public Vector2[] uv; public SubDef[] subs; }
         public class ClipTrack { public int bone; public bool hasPos, hasRot; public Vector3[] pos; public Quaternion[] rot; }
         public class ClipDef { public string name; public float dur; public int frames; public ClipTrack[] tracks; }
 
         public float rawHeight = 2.45f; // altura do modelo em unidades nativas (medida dos vértices)
         public List<BoneDef> bones = new List<BoneDef>();
         public List<MeshDef> meshes = new List<MeshDef>();
+        public List<StaticDef> statics = new List<StaticDef>();
         public Dictionary<string, string> matTex = new Dictionary<string, string>();
         public Dictionary<string, ClipDef> clips = new Dictionary<string, ClipDef>();
 
@@ -47,7 +49,8 @@ namespace TitansMod
                 var p = new TitanPack { dir = assetDir };
                 using (var r = new BinaryReader(File.OpenRead(f)))
                 {
-                    if (new string(r.ReadChars(4)) != "TPK1") { log("magic inválido"); return false; }
+                    string magic = new string(r.ReadChars(4));
+                    if (magic != "TPK2") { log("pacote " + magic + " incompatível: re-exporte com export_titan.py (TPK2)"); return false; }
                     int nb = r.ReadInt32();
                     for (int i = 0; i < nb; i++)
                     {
@@ -102,6 +105,29 @@ namespace TitansMod
                         }
                         p.meshes.Add(m);
                     }
+                    int nst = r.ReadInt32();
+                    for (int i = 0; i < nst; i++)
+                    {
+                        var s = new StaticDef();
+                        s.name = RStr(r); s.parentBone = RStr(r);
+                        int nv = r.ReadInt32();
+                        s.verts = new Vector3[nv]; s.normals = new Vector3[nv]; s.uv = new Vector2[nv];
+                        for (int v = 0; v < nv; v++) s.verts[v] = RV3(r);
+                        for (int v = 0; v < nv; v++) s.normals[v] = RV3(r);
+                        for (int v = 0; v < nv; v++) s.uv[v] = new Vector2(r.ReadSingle(), r.ReadSingle());
+                        int ns = r.ReadInt32();
+                        s.subs = new SubDef[ns];
+                        for (int si = 0; si < ns; si++)
+                        {
+                            var sd = new SubDef();
+                            sd.mat = RStr(r);
+                            int ni = r.ReadInt32();
+                            sd.tris = new int[ni];
+                            for (int ti = 0; ti < ni; ti++) sd.tris[ti] = r.ReadInt32();
+                            s.subs[si] = sd;
+                        }
+                        p.statics.Add(s);
+                    }
                     int nmat = r.ReadInt32();
                     for (int i = 0; i < nmat; i++) { string k = RStr(r); p.matTex[k] = RStr(r); }
                     int nc = r.ReadInt32();
@@ -140,7 +166,7 @@ namespace TitansMod
                     }
                 if (maxY > minY + 0.2f) p.rawHeight = maxY - minY;
                 Loaded = p;
-                log("TitanPack: " + p.bones.Count + " bones, " + p.meshes.Count + " meshes, " + p.clips.Count + " clips, altura crua " + p.rawHeight.ToString("F2"));
+                log("TitanPack: " + p.bones.Count + " bones, " + p.meshes.Count + " meshes skinned, " + p.statics.Count + " estáticas, " + p.clips.Count + " clips");
                 return true;
             }
             catch (Exception e) { log("TitanPack falhou: " + e); return false; }
@@ -186,9 +212,151 @@ namespace TitansMod
             catch (Exception e) { Log("textura falhou " + file + ": " + e.Message); return null; }
         }
 
-        // Monta uma instância: hierarquia de bones + malhas skinnadas por CPU.
-        // (BoneWeight[] não passa pelo interop do Unhollower, então o skinning é feito na mão a cada frame.)
+        public class Look
+        {
+            public string body = "Body";       // Body / Body_fat / Body_muscle / Body_medium / Body_skinny
+            public string hair = null;         // Hair_eren / Hair_messy / Hair_long / null
+            public Color eyeTint = new Color(0.95f, 0.95f, 0.85f);
+            public float eyeScale = 1f;
+            public Color hairTint = new Color(0.18f, 0.12f, 0.08f);
+            public Color tint = Color.white;
+        }
+
+        private MeshDef FindMesh(string name)
+        {
+            foreach (var m in meshes) if (m.name == name) return m;
+            return null;
+        }
+
+        private static Mesh MakeUnityMesh(Vector3[] verts, Vector3[] normals, Vector2[] uv, SubDef[] subs)
+        {
+            var mesh = new Mesh();
+            mesh.vertices = verts;
+            mesh.normals = normals;
+            mesh.uv = uv;
+            mesh.subMeshCount = subs.Length;
+            for (int s = 0; s < subs.Length; s++) mesh.SetTriangles(subs[s].tris, s);
+            mesh.RecalculateBounds();
+            return mesh;
+        }
+
+        private Material[] MakeMaterials(SubDef[] subs, Color tint, Material donor, Texture2D forceTex, bool forceNoTex)
+        {
+            var mats = new Material[subs.Length];
+            for (int s = 0; s < subs.Length; s++)
+            {
+                string texFile;
+                matTex.TryGetValue(subs[s].mat, out texFile);
+                var tex = forceNoTex ? null : (forceTex != null ? forceTex : GetTexture(texFile));
+                mats[s] = MakeMaterial(tex, tint, donor);
+            }
+            return mats;
+        }
+
+        // Monta uma instância: hierarquia de bones + corpo/cabeça skinnados por CPU + olhos/cabelo estáticos presos nos ossos.
+        public GameObject BuildInstance(Look look, Material shaderDonor, out Transform[] boneTr, out List<CpuSkin> skins)
+        {
+            Color tint = look.tint;
+            boneTr = new Transform[bones.Count];
+            for (int i = 0; i < bones.Count; i++)
+            {
+                var b = bones[i];
+                var go = new GameObject(b.name);
+                var tr = go.transform;
+                if (b.parent >= 0) tr.SetParent(boneTr[b.parent], false);
+                tr.localPosition = b.pos;
+                tr.localRotation = b.rot;
+                tr.localScale = b.scl;
+                boneTr[i] = tr;
+            }
+            var root = boneTr[0].gameObject;
+            skins = new List<CpuSkin>();
+
+            var chosen = new List<MeshDef>();
+            var body = FindMesh(look.body) ?? FindMesh("Body");
+            var head = FindMesh("Head");
+            if (body != null) chosen.Add(body);
+            if (head != null) chosen.Add(head);
+
+            foreach (var m in chosen)
+            {
+                var mesh = MakeUnityMesh(m.verts, m.normals, m.uv, m.subs);
+                var mb = mesh.bounds;
+                mesh.bounds = new Bounds(mb.center, mb.size * 2.5f);
+
+                var go = new GameObject(m.name);
+                go.transform.SetParent(root.transform, false);
+                var mf = go.AddComponent<MeshFilter>();
+                mf.sharedMesh = mesh;
+                var mr = go.AddComponent<MeshRenderer>();
+                mr.materials = MakeMaterials(m.subs, tint, shaderDonor, null, false);
+                skins.Add(new CpuSkin(m, mesh, go.transform, boneTr));
+            }
+
+            // olhos (estáticos no osso Eyes, no espaço local do osso)
+            foreach (var s in statics)
+            {
+                bool isEyes = s.name == "Eyes";
+                bool isHair = look.hair != null && s.name == look.hair;
+                if (!isEyes && !isHair) continue;
+                int pb = FindBone(s.parentBone);
+                var parent = boneTr[pb];
+                var go = new GameObject(s.name + "_mesh");
+                go.transform.SetParent(parent, false);
+                var mesh = MakeUnityMesh(s.verts, s.normals, s.uv, s.subs);
+                go.AddComponent<MeshFilter>().sharedMesh = mesh;
+                var mr = go.AddComponent<MeshRenderer>();
+                if (isEyes)
+                {
+                    mr.materials = MakeMaterials(s.subs, look.eyeTint, shaderDonor, null, true);
+                    go.transform.localScale = Vector3.one * look.eyeScale;
+                }
+                else
+                {
+                    mr.materials = MakeMaterials(s.subs, look.hairTint, shaderDonor, null, true);
+                    FitHair(go.transform, parent, s, head, root.transform);
+                }
+            }
+            return root;
+        }
+
+        // Encaixa a cabeleira no topo da cabeça: escala pela largura da cabeça e posiciona pelo socket.
+        private void FitHair(Transform hair, Transform socket, StaticDef hairDef, MeshDef headDef, Transform root)
+        {
+            try
+            {
+                Vector3 hmin = new Vector3(float.MaxValue, float.MaxValue, float.MaxValue), hmax = -hmin;
+                foreach (var v in hairDef.verts) { hmin = Vector3.Min(hmin, v); hmax = Vector3.Max(hmax, v); }
+                Vector3 cmin = hmin, cmax = hmax;
+                if (headDef != null)
+                {
+                    cmin = new Vector3(float.MaxValue, float.MaxValue, float.MaxValue); cmax = -cmin;
+                    foreach (var v in headDef.verts) { cmin = Vector3.Min(cmin, v); cmax = Vector3.Max(cmax, v); }
+                }
+                float headW = Mathf.Max(0.001f, cmax.x - cmin.x);
+                float hairW = Mathf.Max(0.001f, hmax.x - hmin.x);
+                float scale = headW * 1.12f / hairW;
+                // ponto alvo: topo da cabeça (espaço do root = espaço da malha na bind pose), descendo 20% da altura da cabeça
+                Vector3 headTop = new Vector3((cmin.x + cmax.x) * 0.5f, cmax.y - (cmax.y - cmin.y) * 0.2f, (cmin.z + cmax.z) * 0.5f);
+                // o cabelo tem a base no seu próprio minY: alinhar base do cabelo com o alvo
+                Vector3 hairBaseOffset = new Vector3((hmin.x + hmax.x) * 0.5f, hmin.y + (hmax.y - hmin.y) * 0.25f, (hmin.z + hmax.z) * 0.5f) * scale;
+                Vector3 worldTarget = root.TransformPoint(headTop) - hairBaseOffset;
+                hair.position = worldTarget;
+                hair.rotation = root.rotation;
+                var ls = socket.lossyScale;
+                float s = Mathf.Max(0.000001f, (Mathf.Abs(ls.x) + Mathf.Abs(ls.y) + Mathf.Abs(ls.z)) / 3f);
+                hair.localScale = Vector3.one * (scale / s);
+            }
+            catch (Exception e) { Log("FitHair: " + e.Message); }
+        }
+
+        [Obsolete("use BuildInstance(Look, ...)")]
         public GameObject BuildInstance(string bodyTexFile, Color tint, Material shaderDonor, out Transform[] boneTr, out List<CpuSkin> skins)
+        {
+            return BuildInstance(new Look { tint = tint }, shaderDonor, out boneTr, out skins);
+        }
+
+        private GameObject BuildInstanceLegacy(string bodyTexFile, Color tint, Material shaderDonor, out Transform[] boneTr, out List<CpuSkin> skins)
         {
             boneTr = new Transform[bones.Count];
             for (int i = 0; i < bones.Count; i++)

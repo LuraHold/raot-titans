@@ -16,6 +16,9 @@ dotnet build -c Release
 copy bin\Release\net472\Titans.dll X:\Downloads\raot_2.086_windows\Mods\
 ```
 
+## Formato TPK2 (2026-10-15, fim da tarde)
+`assets/titan.tpk` agora é **TPK2**: esqueleto + malhas skinned (Body, Body_fat, Body_muscle, Body_medium, Body_skinny, Head) + malhas estáticas presas em ossos (Eyes→`Eyes`, Hair_eren/Hair_messy/Hair_long→`HairSocket`) + materiais + 19 clips. O loader recusa TPK1. `TitanPack.Look` escolhe corpo/cabelo/olhos por variante. Sons em `assets/sfx/*.wav` (24 do AoTTG2) via `TitanSfx`.
+
 ## F0 em andamento (2026-10-15, tarde) — lições
 - **BoneWeight[] não passa no interop** do Unhollower → skinning por CPU (`CpuSkin`), MeshFilter/MeshRenderer em vez de SMR.
 - **Altura**: medir dos vértices skinnados (pré-skinning dava 0.34 e explodia a escala 50x). cfgScale = altura em "jogadores" (1.7m).

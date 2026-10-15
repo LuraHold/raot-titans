@@ -15,7 +15,7 @@ Mod que transforma o **Roark's Attack on Titan fan game** (PvP puro) num jogo de
 3. Rode o jogo uma vez e feche: o MelonLoader gera `MelonLoader\Managed\*.dll` (as referências do build).
 4. Clone este repo. Se o caminho do jogo for outro, ajuste `<GamePath>` no `TitansMod.csproj`.
 5. Build: `dotnet build -c Release` (precisa de SDK .NET; qualquer 6+ serve, baixa o pacote de referência net472 sozinho).
-6. Copie `bin\Release\net472\Titans.dll` pra `<jogo>\Mods\` **e a pasta `assets\` do repo pra `<jogo>\Mods\TitansAssets\`** (modelo/animações reais do titã, extraídos do AoTTG2; sem ela o mod cai no corpo de primitivas).
+6. Copie `bin\Release\net472\Titans.dll` pra `<jogo>\Mods\` **e o CONTEÚDO da pasta `assets\` do repo pra `<jogo>\Mods\TitansAssets\`** (fica `TitansAssets\titan.tpk`, `TitansAssets\tex_*.png`, `TitansAssets\sfx\*.wav`). São o modelo, animações e sons reais do titã extraídos do AoTTG2; sem isso o mod cai no corpo de primitivas e sons improvisados. Atualizou o repo? Copie de novo: o `titan.tpk` muda de versão.
 7. Abra o jogo → partida offline → teclas abaixo.
 
 ## Controles in-game

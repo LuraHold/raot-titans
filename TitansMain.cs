@@ -383,11 +383,17 @@ namespace TitansMod
 
         private Vector3 GroundAt(Vector3 pos, float refY)
         {
+            bool found;
+            return GroundAt(pos, refY, out found);
+        }
+
+        private Vector3 GroundAt(Vector3 pos, float refY, out bool found)
+        {
             Vector3 origin = new Vector3(pos.x, refY + 35f, pos.z);
             var hits = Physics.RaycastAll(origin, Vector3.down, 300f);
             float best = float.MaxValue;
             Vector3 result = new Vector3(pos.x, refY, pos.z);
-            bool found = false;
+            found = false;
             foreach (var h in hits)
             {
                 if (h.collider == null) continue;
@@ -535,20 +541,42 @@ namespace TitansMod
             var pack = TitanPack.Loaded;
             var t = new Titan { kind = kind, scale = scale, spawnTime = Time.time, usesPack = true };
 
-            string tex;
+            // visual por variante: corpo, cabelo e olhos diferentes (olhos "psicopatas" no corredor)
+            var look = new TitanPack.Look();
             switch (kind)
             {
-                case TitanKind.Runner: tex = "tex_skinny_titan.png"; break;
-                case TitanKind.Jumper: tex = "tex_medium_titan.png"; break;
-                case TitanKind.Crawler: tex = "tex_muscle_titan.png"; break;
-                case TitanKind.Ally: tex = "tex_vanilla_titan.png"; break;
-                default: tex = (rng.Next(2) == 0) ? "tex_vanilla_titan.png" : "tex_fat_titan.png"; break;
+                case TitanKind.Runner:
+                    look.body = "Body_skinny"; look.hair = null;
+                    look.eyeTint = new Color(1f, 0.15f, 0.1f); look.eyeScale = 1.45f;
+                    break;
+                case TitanKind.Jumper:
+                    look.body = "Body_muscle"; look.hair = "Hair_eren";
+                    look.eyeTint = new Color(1f, 0.85f, 0.2f); look.eyeScale = 1.15f;
+                    break;
+                case TitanKind.Crawler:
+                    look.body = "Body_fat"; look.hair = null;
+                    look.eyeTint = new Color(0.7f, 0.9f, 1f); look.eyeScale = 0.8f;
+                    break;
+                case TitanKind.Ally:
+                    look.body = "Body_muscle"; look.hair = "Hair_messy";
+                    look.eyeTint = new Color(0.6f, 0.8f, 1f); look.tint = new Color(0.55f, 0.7f, 1f);
+                    break;
+                default:
+                    {
+                        int r = rng.Next(4);
+                        look.body = r == 0 ? "Body_medium" : (r == 1 ? "Body_fat" : "Body");
+                        int h = rng.Next(5);
+                        look.hair = h == 0 ? "Hair_messy" : (h == 1 ? "Hair_long" : null);
+                        look.eyeTint = rng.Next(3) == 0 ? new Color(1f, 1f, 0.6f) : new Color(0.95f, 0.95f, 0.85f);
+                        look.eyeScale = 0.9f + (float)rng.NextDouble() * 0.4f;
+                        look.hairTint = rng.Next(2) == 0 ? new Color(0.18f, 0.12f, 0.08f) : new Color(0.08f, 0.07f, 0.06f);
+                    }
+                    break;
             }
-            Color tint = kind == TitanKind.Ally ? new Color(0.55f, 0.7f, 1f) : Color.white;
 
             Transform[] boneTr;
             List<CpuSkin> skins;
-            var root = pack.BuildInstance(tex, tint, titanSkinMat, out boneTr, out skins);
+            var root = pack.BuildInstance(look, titanSkinMat, out boneTr, out skins);
             root.name = "TITAN_" + kind;
             t.root = root; t.tr = root.transform; t.boneTr = boneTr; t.skins = skins;
             t.anim = new TitanAnim(pack, boneTr);
@@ -1206,8 +1234,20 @@ namespace TitansMod
                 if (t.state == TitanState.Leap) return;
             }
             Vector3 next = t.tr.position + t.tr.forward * speed * dt;
-            next = GroundAt(next, t.tr.position.y + 2f);
-            if (next.y > t.tr.position.y + 4f) next.y = t.tr.position.y;
+            bool grounded;
+            Vector3 g = GroundAt(next, t.tr.position.y + 2f, out grounded);
+            if (!grounded)
+            {
+                // sem chão embaixo (beira do mapa/buraco): NÃO sobe (era o bug do trampolim); desce devagar e dá meia-volta
+                next.y = t.tr.position.y - 4f * dt;
+                t.avoidHeading = t.tr.eulerAngles.y + 180f;
+                t.avoidUntil = Time.time + 1.0f;
+            }
+            else
+            {
+                next = g;
+                if (next.y > t.tr.position.y + 4f) next.y = t.tr.position.y; // degrau alto demais: não teleporta pra cima
+            }
             t.tr.position = next;
 
             t.bobPhase += dt * Mathf.Max(3f, speed * 1.1f);

@@ -26,6 +26,9 @@ Bugs reportados pelo Jeff em 2026-10-15:
 - [x] Devorada: morte só quando a mão com o jogador chega na `MouthHitbox` (antes matava em 4,6s fixos, no meio do "te olha").
 - [ ] Atravessar casas/árvores: implementado desvio por raycast no peito (contorna), saltador pula, e durante a caça quebra objetos pequenos (cerca, barraca, casinha < 90% da altura; nunca terreno/estrada). Validar no City e Forest.
 - [ ] Calibrar: altura padrão (~7 jogadores ≈ 12m), alcance de patada/agarrão.
+- [x] Trampolim/queda infinita: quando o raio de chão não achava nada, `GroundAt` devolvia a altura de referência (`y+2`) e o titã subia 2m por frame. Agora sem chão = desce devagar e dá meia-volta.
+- [x] Olhos: eram malha estática (`eyes_0`) no osso `Eyes`, fora da exportação skinned. TPK2 traz malhas estáticas presas em ossos.
+- [x] Variedade: 5 corpos reais do AoTTG2 (normal/gordo/musculoso/médio/magro) + 3 cabelos (juba do Titã do Eren e 2 cabeleiras) + olhos por variante (corredor: vermelhos e grandes; saltador: amarelos; rastejante: pálidos; normal: sorteio). Validar encaixe do cabelo no City.
 **Aceite:** 15 min de sessão com waves sem nenhum bug visual; titã parece nativo do jogo; gancho gruda; dá pra voar sem teto.
 
 ### F1 — Experiência de caça completa
