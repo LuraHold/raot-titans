@@ -25,8 +25,11 @@ Mod que transforma o **Roark's Attack on Titan fan game** (PvP puro) num jogo de
 | F9 | Liga/desliga modo WAVES (ondas crescentes + bônus) |
 | F7 | Remove todos os titãs |
 | F8 | Congela/solta titãs |
+| F10 | Menu de configurações (dificuldade, toggles, spawn por tipo) |
 | T | Skill EREN: titã aliado por 25s que soca os inimigos (cooldown 60s) |
 | G | Skill LEVI: 7s de fúria — dash + corte facilitado (cooldown 40s) |
+| Y | Skill MIKASA: lançamento teleguiado na nuca do titã mais perto (cd 30s) |
+| H | Skill ARMIN: 8s de titãs lentos + nucas marcadas (cd 45s) |
 
 Mecânica: nuca vermelha = ponto fraco (passar voando perto em velocidade); pontos = velocidade × precisão (CORTE LENDÁRIO/PERFEITO/CRÍTICO/fraco). Pulsos = decepar braço; joelhos = derrubar (nuca exposta). Agarrão: corte o pulso da mão que te segura ou vira comida (morte real via comando do jogo).
 

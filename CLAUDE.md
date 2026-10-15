@@ -16,7 +16,15 @@ dotnet build -c Release
 copy bin\Release\net472\Titans.dll X:\Downloads\raot_2.086_windows\Mods\
 ```
 
-## v2 (2026-10-15) — o que tem
+## v3 (2026-10-15) — fila executada
+- **Vapor**: rajadas de "fumaça" (esferas brancas que sobem e encolhem) na morte, nuca cortada, braço decepado, soco do aliado e transformação do Eren.
+- **Sons**: reusa AudioClips do próprio jogo achados em runtime (passos = clips de foot/land em pitch grave; vapor = clips de gás; impacto = hit/impact). AudioSource 3D por titã. Liga/desliga no menu.
+- **Pele do jogo**: tenta achar `mat_training_titan` em runtime e aplica no corpo (com tint por variante). Fallback = cor sólida.
+- **Multi-alvo**: titãs caçam o jogador MAIS PRÓXIMO (varre `CharacterObject` da cena a cada 1s — inclui amigos no lobby). Agarrão/devorada/patada só valem pro player local (morte remota não dá pra forçar daqui).
+- **Skills novas**: Y = Mikasa (lançamento teleguiado na nuca do titã mais perto, cd 30s); H = Armin (8s: titãs 50% mais lentos + nuca marcada grande, cd 45s).
+- **Menu F10**: sliders (máx/escala/velocidade/visão), toggles (comer, nuca, sons, pele), botões de spawn por tipo, salvar. Libera o cursor ao abrir.
+
+## v2 (2026-10-15) — base
 - Corpo articulado próprio (primitivas com juntas: quadril/torso/cabeça/braços/pernas, andar procedural). O clone do training dummy do v1 foi ABANDONADO: bounds bugados spawnavam o titã em cima do player (bug do "fiquei só voando") e o jogo destruía o clone.
 - Variantes: Normal, Corredor (2x vel.), Saltador (pulo balístico), Rastejante (baixo e rápido). F6 = aleatório.
 - Percepção: visão 130m num cone de 75° + "audição" 16m; sem ver o player, vagueia pelo mapa.
@@ -39,8 +47,8 @@ copy bin\Release\net472\Titans.dll X:\Downloads\raot_2.086_windows\Mods\
 - [ ] Convidar a equipe como collaborators no repo GitHub (LuraHold/raot-titans).
 
 ## Próximos passos (fila de trabalho)
-- [ ] Sincronizar titãs no multiplayer (os titãs hoje são locais por cliente): seed determinística por partida ou NetworkMessages próprias do Mirror.
-- [ ] Visual: tentar vestir o corpo com `mat_training_titan` do jogo / malha skinned de verdade.
-- [ ] Sons (passos, rugido, vapor) e partículas de vapor na morte.
-- [ ] Mais skills por personagem e detecção do personagem escolhido.
-- [ ] Fogo amigo on/off e settings de partida próprios (menu simples via GUI).
+- [ ] Sincronizar titãs no multiplayer de verdade (posições iguais pra todos): investigar registrar NetworkMessage própria no Mirror via Unhollower (difícil: struct il2cpp custom) ou seed determinística + relógio de partida.
+- [ ] Malha skinned de verdade no titã (hoje é primitivas com material do jogo).
+- [ ] Rugido próprio (sintetizar AudioClip via SetData) e animação de comer mais elaborada.
+- [ ] Detecção do personagem escolhido pra travar skill por personagem (hoje as 4 skills são livres: T/G/Y/H).
+- [ ] Ajustes de balanceamento conforme feedback do Jeff jogando.
