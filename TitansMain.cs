@@ -388,6 +388,12 @@ namespace TitansMod
 
         private int groundLayer = -1; // layer do chão do mapa, detectada no primeiro spawn
 
+        private int PlayerLayer()
+        {
+            try { var pm = PlayerMain.Instance; if (pm != null) return pm.gameObject.layer; } catch { }
+            return -1;
+        }
+
         private Vector3 GroundAt(Vector3 pos, float refY)
         {
             bool found;
@@ -628,7 +634,10 @@ namespace TitansMod
                 cap.radius = capR / s;
                 cap.center = new Vector3(0f, capH * 0.5f / s, 0f);
                 cap.direction = 1;
-                if (groundLayer >= 0) root.layer = groundLayer;
+                // layer da cápsula = layer do JOGADOR (colide com o mapa na matriz de física do RAOT).
+                // Chão-com-chão não colide: colocar na layer do chão fazia o titã atravessar o mapa.
+                int pl = PlayerLayer();
+                root.layer = pl >= 0 ? pl : 0;
                 var rb = root.AddComponent<Rigidbody>();
                 rb.mass = 5000f;
                 rb.drag = 0.5f;

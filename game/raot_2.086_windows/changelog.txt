@@ -1,0 +1,764 @@
+2.086
+October 23rd, 2022
+
+GAMEMODE CHANGES/FIXES
+-------------------------------------------------------------------------
+    - Added configurable kill boundary feature to FFA/Team Elimination modes
+    - Added first person mode which can be enabled as a server setting in the advanced settings tab
+    - Added the Waypoint Racing game mode with 3 races per standard map
+    - Added Regicide custom server settings for adjusting the reveal effect duration, reveal kill count, and respawn time
+    - Fixed Regicide king reveal VFX sometimes not appearing upright as expected
+    - Fixed Regicide dropped crowns being able to get easily stuck in small gaps
+
+WEAPON CHANGES/FIXES
+-------------------------------------------------------------------------
+    - Changed parry wait times to no longer consider jitter (now only player ping is considered)
+    - Fixed sword throws sometimes phasing through enemies resulting in false misses
+    - Fixed parries not properly compensating for ping resulting in a timing advantage at higher pings
+    - Fixed parry wait times over-compensating by about 50ms causing extra inconsistency
+    - Fixed sword throws being able to parry high-ping lunges in rare cases with precise timing
+
+HUD/UI CHANGES/FIXES
+-------------------------------------------------------------------------
+    - Added counter to the Team Selection UI to display the weapon usage on the team
+    - Added different disconnect messages when a player was forcefully disconnected
+    - Added a dialog message when attempting to enter an invalid username
+    - Added streamer/caster HUD (enabled via console command)
+    - Changed the hosting menu layout to be more organized and better fit the custom mode 
+    - Fixed 'lobby update failed' dialog getting stuck on screen and not being able to be clicked on to close it
+    - Fixed dropdown menu UI overlapping the console when opened
+    - Fixed match limit text overlapping the round timer tooltip
+
+GENERAL CHANGES/FIXES
+-------------------------------------------------------------------------
+    - Added custom-fitted ceiling mesh to City to better limit the height in each map section, particularly in the park area
+    - Changed 'borderless window' display mode to not minimize the game when unfocused/tabbed out
+    - Reduced the intensity of the map boundary effect so it is less visually disruptive
+    - Fixed match logging not writing to the appropriate file correctly on non-hosts
+    - Fixed being able to make an impossible weapon configuration using the weapon limits
+    - Fixed matches not ending correctly in certain modes when one team lost due to its players leaving the game
+    - Fixed hosting menu incorrectly keeping teams and retaining settings when switching from online to offline menus
+
+
+
+
+
+2.070
+August 26th, 2022
+
+REGICIDE CHANGES
+-------------------------------------------------------------------------
+    - Added crown pickup mechanic to allow players to reclaim any dropped crown if their king has died
+    - Added king reveal system where killing enemy players will eventually cause the enemy king to be pinged via a visual effect
+    - Added additional incentive for king to fight by resetting their team's reveal counter when the king gets a kill
+    - Added progress bar to interaction HUD while performing timed interactions (currently used for the crown pickup)
+    - Changed draw rules to award the win to the last team standing, else the last king standing, otherwise a draw
+    - Changed draws to award a point to all drawing teams like in team elimination, except for teams with no living king
+    - Changed default starting gas and ammo from half to full
+    - Changed spawning at round start to avoid the center of the map and ensure kings are spawned towards the map perimeter
+    - Changed default enemy visibility from 40m to 30m
+
+OPTIMIZATIONS
+-------------------------------------------------------------------------
+    - Added Character IK Quality general user setting with 3 levels to provide better performance at lower values
+    - Added general user setting for disabling visual effect lights to help with performance
+    - Added proximity culling for most sound effects when past the max audible distance
+    - Improved performance of smoke flare particle collisions and reduced particle count
+    - Improved performance of player network data read/write operations
+    - Improved performance of VFX and SFX systems when starting/stopping and handling many effect objects
+    - Improved performance of cable animation when shooting and retracting hooks
+
+MATCH LOGGING CHANGES/FIXES
+-------------------------------------------------------------------------
+    - Added ForceCreateMatchLog command to generate a match log for an active match (match will still continue to be tracked)
+    - Added PreviewMatchLog command to print the currently tracked log data to the console
+    - Changed match log file timestamping to be more readable and useful
+    - Changed match log to track players as having played on a team if they spawned on the team, rather than on a general timer
+    - Fixed match log history sometimes not saving files correctly causing overwrites
+    - Fixed match log sometimes not including players who were disconnected from the lobby and rejoined
+    - Fixed match log overwriting player entries that had the same eos id but different username or discord id
+
+CONSOLE & LOGGING CHANGES/FIXES
+-------------------------------------------------------------------------
+    - Added MyDiscord command to check your Discord ID when logged in
+    - Added player Discord ID to the 'list' console command output
+    - Added Discord IDs of joining players to the server chat logging output
+    - Added command hint display to the console when typing to show commands that contain the typed text
+    - Changed the console command autocomplete (tab) to match the new hint display (can autocomplete when only 1 hint)
+    - Fixed the console being able to be opened while the chat was already open
+
+SERVER SETTINGS CHANGES
+-------------------------------------------------------------------------
+    - Added Advanced Settings tab to the host settings menu
+    - Added a server setting to auto-kick AFK players after a specified amount of time
+    - Added a server setting to only allow people who are logged into Discord to join
+    - Added an option in team settings to synchronize settings for all teams
+    - Added weapon usage limit sliders to team settings
+    - Added infinite ammo and infinite gas options to team settings
+
+GENERAL CHANGES/FIXES
+-------------------------------------------------------------------------
+    - Added support for resolutions of more aspect ratios such as 4:3, 5:4, 21:9, and others (some of the UI may not support these!)
+    - Added RCL champion exclusive emote with bronze, silver, and gold tier versions
+    - Added some general settings tooltips for miscellaneous settings
+    - Changed the text sharpness and brightness in dialog boxes to make the text more readable and easy on the eyes
+    - Changed spawn point densities on all maps to be more balanced throughout the map (makes stack spawning less likely)
+    - Changed the max audible distance of some sound effects that were audible from much further than they should be
+    - Fixed smoke flare particles doing weird synchronized spins when the flare impacted the ground or an obstacle
+    - Fixed APG bullet flyby sound effects playing at near max volume when close to the max distance from the player
+    - Fixed loading a lobby preset with only spears in racing or infection failing to load
+    - Fixed the combat hud being wrongly hidden when toggling the Show HUD user option
+    - Fixed duplicated usernames being possible in lobbies under certain conditions
+
+
+
+
+2.043
+July 4th, 2022
+
+GENERAL CHANGES/FIXES
+-------------------------------------------------------------------------
+    - Added ability to join a password protected server by pressing enter after typing the password (had to click Connect before)
+    - Added scoreboard handling to ignore kills and deaths that occur after a round ends (only counts during a round now)
+    - Added hotkeys for selecting weapons while in the gear swap menu
+    - Added automatic match result logging (can enable and access through the console) for team elimination matches
+    - Added 500ms delay before ending a round to handle kill trades and suicides (ensures it ends in a draw instead)
+    - Changed teammate name HUD display to default to on rather than off
+    - Changed the enemy visibility setting increment to 5m instead of 10m
+
+MECHANICS CHANGES/FIXES
+-------------------------------------------------------------------------
+    - Added client-side extrapolation to player positions to help with longswording and make dodging more effective
+    - Added speed reduction of 15% while stressed (affects dodge roll, reel, burst, gassing, and total speed)
+    - Added speed reduction of 10% while reloading (if also stressed, then the reduction will only be 15%)
+    - Added 33% stress reward for all classes after killing an enemy player
+    - Added 20% stress reward for APG and TS when their attack is parried (it is 33% for ODM)
+    - Changed dodge roll to have a maximum allowed speed of 24m/s (was previously uncapped) and slightly reduced speed
+    - Changed player hitboxes to remain a fixed height above ground, meaning rolls and slides no longer 'shrink' the hitbox
+
+BURSTING CHANGES
+-------------------------------------------------------------------------
+    - Added burst chaining stress penalty to gradually increase stress cost of rapidly chained bursts
+    - Added burst queueing to detect burst inputs while bursting and apply it immediately when the active burst ends
+    - Changed burst sustain durations to be more consistent (most notably shorter vertical burst durations)
+    - Changed bursts to be more responsive, especially when bursting in a direction opposite to your current velocity
+    - Changed bursts to preserve more acquired speed when the burst ends, particularly for forward bursting
+    - Changed hooked burst momentum preservation to allow for smoother swinging movement
+    - Reduced bursting speed limit from 28m/s to 26m/s (mostly affects a few initial acceleration frames)
+    - Adjusted burst gas costs to be slightly more expensive initially, but slightly cheaper to sustain
+    - Reduced backburst strength (affects all classes)
+
+SWORDS CHANGES
+-------------------------------------------------------------------------
+General
+    - Added poise cooldown after lunging of 0.2s
+    - Added crosshair coloring when poised for ODM: green when within lunge distance, red otherwise
+    - Increased animation transition speed from poise to lunge or parry to provide more rapid feedback
+    - Increased ODM stress recharge rate by about 20%
+    - Reduced ODM burst stress initial cost by ~5% and sustained burst cost by ~20%
+    - Reduced ODM stress recharge delay (how long before stress recharge starts) by about ~15%
+    - Reduced post-parry poise cooldown duration slightly (can poise sooner after a parry)
+
+Attacking
+    - Reworked lunge to partially inherit momentum rather than applying max speed at all times
+    - Reworked lunge acceleration and speed
+    - Reduced total lunge duration from 0.8s to 0.65s
+    - Increased lunge maximum steer angle from 45 degrees to 60 degrees and increase turning speed by 2x
+    - Increased post-lunge speed preservation from 50% to 75% (keep more momentum after the lunge)
+    - Changed lunge to now auto-unpoise (cant keep it held down) to require manual repoising to parry or attack again
+    - Changed lunge aim assist to start weaker at max lunge range and get stronger with distance to target
+    - Changed lunge aim assist to not be applied if there are multiple targets available
+
+Parrying
+    - Increased parry damage from APG single shots from 20% to 25%, and doubles from 50% to 100%
+    - Changed parries against ODM and APG to be based on looking at the enemy player and not the original attack direction
+    - Adjusted parry wait timings on the server to allow for more consistency in parrying
+    - Increased lunge offensive parry (clash) duration from 0.4s to 0.5s to better match the lunge animation
+    - Changed all parry windows to 0.3s (ie. all attacks are now at 0.3s)
+    - Increased sword throw parry angle from 30deg to 45deg (same as other parries)
+    - Removed speed slowdown after parrying so that momentum is now unaffected by the parry
+    - Removed the minimum distance requirement when parrying (was ~2m)
+
+APG CHANGES
+-------------------------------------------------------------------------
+General
+    - Added APG stress forgiveness for fully charged shots (no shot or miss stress penalty when fully charged)
+    - Added crosshair coloring when poised for APG: green when in both ranges, orange when in single range, red otherwise
+    - Changed APG to be unable to attack while stressed
+    - Reduced APG burst stress costs a bit, with sustain costs being slightly more reduced
+    - Adjusted APG burst stress costs to be slightly more expensive initially, but slightly cheaper to sustain
+    - Changed gun shot VFX to better match the actual gun shot behaviour
+
+Attacking
+    - Reduced APG stress penalty for missed shots by ~15%
+    - Reduced APG double shot range from 20m to 12m
+    - Changed APG single shot hitbox to be smaller at close range and larger when near max range
+    - Changed APG double shot hitbox to be larger, especially at close range, and generally more consistent in size
+
+SPEARS CHANGES
+-------------------------------------------------------------------------
+General
+    - Added ping compensation for spear detonations to better account for the latency of the shooter
+    - Added a minimum simulated ping to spear firing and detonation of 80ms (so it always feels like you have at least 80 ping)
+    - Added 0.33s attack cooldown on being able to fire the opposite spear after an attack (after it detonates)
+    - Added crosshair coloring when poised for TS: green when past both min dists, orange when past single, red otherwise
+    - Changed spears to not be able to be fired when stressed
+    - Adjusted spear blast size growth to better match the vfx
+    - Reduced TS burst stress costs while sustaining by ~33%
+    - Improved spear detonation VFX to better match the actual size of the blast radius and have about 33% faster playback speed
+    - Changed spear detonation VFX to use a hemispherical shape when up against a surface
+
+Attacking
+    - Increased spear charge time from 0.33s to 0.4s
+    - Adjusted accelerations to reach top speed faster (around when the min distance is reached)
+    - Adjusted single spear speed to work with faster acceleration (now is 90m/s)
+    - Reduced single spear blast radius from 7m to 6m
+    - Added minimum detonation time to double spears of 1.2s from the time the spear is fired (only applies when embedded)
+    - Adjusted double spear speed to work with faster acceleration (now is 125m/s)
+    - Increased double spear minimum travel distance from 40m to 60m
+    - Reduced double spear blast radius from 9m to 8m
+    - Increased spear blast duration (hit detection window) to be a lot longer, about 3x, to better match the vfx
+
+BUG FIXES
+-------------------------------------------------------------------------
+General
+    - Fixed being unable to jump while sliding
+    - Fixed resupply playing sfx and animation when the player steps outside the zone during the action (now immediately cancels)
+    - Fixed broken rotations when dodge rolling where the character would face the wrong direction during the roll
+    - Fixed a bunch of ping compensation issues
+    - Fixed a 100ms delay that was on the bursting animations (should play immediately on bursting now)
+    - Fixed player icons not appearing while spectating in infection while the visibility distance is at none
+    - Fixed some UI sound effects that were not playing when interacting with text input fields
+    - Fixed mouse scroll causing the free cam settings to change if used while the console was open
+
+Weapons
+    - Fixed spears not detonating on the same frame they reached the max distance (was delayed until the following frame)
+    - Fixed throwing blade and spear impales phasing through players when passing through certain parts of the hitbox
+    - Fixed lunge aim assist targeting players through walls and obstacles (now requires line of sight)
+    - Fixed some parries wrongly failing because of incorrect player view direction checks
+    - Fixed spear ejection vfx not disappearing at the correct time
+
+Menu/UI
+    - Fixed max players in server not updating when changing lobby settings
+    - Fixed game mode and other settings sometimes getting reset to deathmatch when switching maps in the hosting menu
+    - Fixed lobby name filter causing searches to return nothing due to case sensitivity (name filter no longer affects search)
+    - Fixed weapon starting ammo amount in game not always matching what the hosting menu indicated
+    - Fixed score display for FFA wrongly considering spectator scores when determining position (1st, 2nd, 3rd, etc)
+
+
+
+
+1.953
+May 8th, 2022
+
+DISCORD INTEGRATION & SUPPORTERS
+-------------------------------------------------------------------------
+    - Added Discord rich presence support to show relevant info when in the main menu, spectating or playing in a game
+    - Added Discord log in system to authenticate users through Discord, with log in and account status UI on main menu
+    - Added Kofi supporters menu to the main menu which displays a list of active supporters (not updated in real-time)
+    - Added Sip emote which is only available to Kofi supporters and will display with the color of the user's Kofi tier
+    - Added Telescope emote which is only available to Twitch and/or Kofi Silver/Gold supporters and will display with the tier color
+
+SERVER SETTINGS
+-------------------------------------------------------------------------
+    - Added lobby presets submenu to the hosting menu to save, load, and manage settings presets
+    - Added server settings for disabling weapon attacks (lunge, throw, single/double apg, single/double spear detonation & impale)
+    - Added server setting for enemy icon visibility distance
+    - Added new team setting 'no resupplies' to disable resupplying for gas or ammo for the team
+    - Added more 'starting gas' intervals in team settings (was 5, now is 9) for more control over team starting gas
+    - Added settings preloading when opening the change game menu so that all settings match the settings of the current game
+    - Increased max players from 24 to 32
+    - Increased threshold for unstable auto kick jitter from 45ms to 60ms
+    - Increased wait for unstable and ping auto kicks from 20s to 30s (1 strike every 10s)
+    - Changed hosting/changegame menu to remember all settings that had been assigned when the menu was closed and reopened
+    - Changed 'full resupplies' setting to allow it to be set for either gas or ammo independently
+    - Changed the default enemy hud icon visibility distance on Elimination from 40m to 30m
+    - Changed default ping limit from 150ms to 200ms
+    - Changed lobby name, password, and max players to be modifiable when changing game
+    - Changed UI for team settings in the hosting menu to have cleaner layout and an ammo count display beneath the weapons
+
+HUD/UI
+-------------------------------------------------------------------------
+    - Added new art and music to the main menu screen
+    - Added numeric display to the team ratio meter UI to show the amount of alive players per team in Elimination, Regicide, Infection, and Accumulation
+    - Added player deaths to the event feed in Racing
+    - Added HideAllIcons and ShowAllIcons commands
+    - Updated UI for hosting menu, team selection menu, and loadout selection menu to show disabled weapon attacks
+    - Reduced player indicator icon hide delay when no longer visible from 2s to 1s
+    - Changed the 'Show Player Hud' setting to a more general 'Show Hud' setting
+    - Changed the 'Show Hud' setting to also hide the event feed, round clock, round score, and objective message UI elements
+    - Changed PrintServerInfo command's 'AllowsUnstable' entry to 'KickUnstable' for naming consistency with the UI in the settings menu
+    - Changed the scoreboard scroll sensitivity to be twice as fast
+    - Changed the scoreboard to be toggleable while in the team select, loadout select, or gear swap menus
+    - Fixed player death icons still showing up even when player icons were set to hidden
+    - Fixed the team icons on the scoreboard sometimes rendering outside of bounds when the board is scrolled
+    - Fixed round score hud not handling team scores of more than 4 digits without overlapping with the team icons
+    - Fixed HUD icons not layering correctly on the screen (resupply icons over top of player icons)
+    - Fixed scoreboard showing incorrect information about the lobby when in a LAN game
+
+LOBBY BROWSER
+-------------------------------------------------------------------------
+    - Added persistent lobby browser sorting so that lobbies remain sorted after searching and refreshing
+    - Added special lobby browser column for passworded which appears at the far left as a padlock icon
+    - Added more descriptions to the weapons column to show all weapon settings combinations for teams
+    - Changed lobby browser Quality column to be on far right and display as an image of 1 to 5 coloured bars rather than text
+    - Changed the ordering of some columns in the lobby browser for better readability
+    - Changed customrules field on the lobby browser to specify what is custom (gear, flares, attacks, visibility)
+    - Changed lobby browser display for 'Teams' column to show the icons for the active teams rather than just a number
+    - Fixed lobbyname, password, maxplayers, and ping limit not syncing to clients on change games
+    - Fixed 'Enter Password' dialog when joining a lobby not correctly disabling mouse input while it is open
+
+GENERAL BUG FIXES
+-------------------------------------------------------------------------
+Mechanics
+    - Fixed cable travel speed being affected by frame rate (noticable at extremely high framerates)
+    - Fixed ending a non forward burst while touching the ground causing the character to instantly change direction
+    - Fixed ending a forward burst and getting grounded at low velocity causing the character to perform a broken animation transition
+    - Fixed instant reload bug when jumping and reloading while sliding
+    - Fixed most cases of sword lunge phasing through players and improved lunge hit detection consistency
+    - Fixed incorrect lag compensation in attack validation checks for lunges and apg shots which led to more false positives
+    - Fixed incorrect and unfair ping compensation when determining kill request wait time for parryable attacks
+    - Fixed emoting being possible while in a blocking action which caused the emote to be incorrectly interruptible
+    - Fixed dodging and jumping being possible on the same frame if timed correctly
+    - Fixed hooks being shot through walls when standing next to them with certain camera and hook orientations
+    - Fixed hooks being able to connect while in a hard landing and allowing the player to reel when they shouldn't
+Map/Mode
+    - Fixed a collider issue where it was possible to get in-between some gear swap stations and the wall they where against
+    - Fixed some gaps in Utgard that the player could be forced into
+    - Fixed soft lock at match start if players left during the countdown and it made the match ineligible to start again
+    - Fixed 'EndMatch' and 'RoundRestart' while already restarting causing the next match/round to be ended as well
+    - Fixed an issue where restarting the round would wrongly load the score from the previous match
+    - Fixed an issue where kills made after the RestartRound command were not removed in the next round
+Misc
+    - Fixed sound effects being cut off or not played at all when there over 20 or so players in the game
+    - Fixed the spectator camera not clearing its velocity when locking on to a player while there was damping on the camera
+    - Fixed camera's damped velocity carrying over when un-following a player after using the middle mouse button to spectate them
+    - Fixed client characters t-posing for a frame when changing gear at a gear swap station
+    - Fixed characters sometimes t-posing for a frame when entering ragdoll
+
+
+
+
+1.906
+December 31st, 2021
+
+SWORD CHANGES/FIXES
+-------------------------------------------------------------------------
+Attacking
+    - Added ability for sword lunge to prevent the poise from auto-canceling by holding down 'F' rather than toggling (allows chaining attacks)
+    - Changed camera behaviour during sword lunges to be a bit more forceful
+    - Changed sword lunge aim assist to be more passive; more 'aim assist' and less 'auto aim'
+    - Changed sword lunge to ignore momentum and instead always move the player in the target direction at constant speed, regardless of previous velocity
+    - Changed combat meter when sword lunging to now deplete as the hit window closes (similar to how the display works when holding an active spear)
+    - Changed lunge to no longer consume any stress from usage except for the miss penalty
+    - Changed lunge miss stress penalty to now consume 50% stress (was 25%), 
+    - Changed lunge miss stress penalty to now trigger overstressing if it was at 75% or more stress when the lunge started (was previously 90%)
+    - Changed lunge to no longer be able to charge while at max stress (can still parry or throw blades while stressed)
+    - Decreased the lunge clash window from 0.5s to 0.4s (the attack duration is 0.8s)
+    - Decreased sword lunge attack cooldown from 1.25s to 0.4s
+    - Decreased sword lunge charge time from 0.25s to 0.20s
+    - Decreased sword throw charge time from 0.33s to 0.25s
+    - Decreased throwing blades max charge time from 1s to 0.75s
+    - Fixed throwing blade impact effects sometimes not making any sound
+    - Fixed throwing blade impact sfx being weirdly quiet, even when right next to it
+Parrying
+    - Added 33% stress reward for parrying attacks (does not apply to clashes)
+    - Added spear parry for the odm: spear will deflect and travel unpredictably and lose manual detonation control (a spear can only be parried once)
+    - Decreased damage received from parrying apg single shots to 20% (was 75%)
+    - Increased parry animation speed by 25%
+    - Increased apg single shot parry window to 0.5s (was 0.33s)
+    - Changed lunge minimum parry distance to 2.5m for all ranged attacks (throw/apg were 5m)
+    - Changed all parry types to provide invulnerability during the parry (was previously against lunges only)
+    - Fixed animator not replaying the parry animation when another parry occurs during the parry animation
+    - Fixed parry animation bug when dodging and allow rotations while in parry animation
+Misc
+    - Added new SFX for sword swings, lunge kills, throwing kills, and parries
+    - Decreased odm gas usage costs for bursting and general movement
+    - Changed sword vfx (blade glow and slash trail) to be generally better looking in poise, burst, and lunge contexts
+    - Changed sword break sfx to be louder so that it can be heard over the other sword sounds
+
+APG CHANGES/FIXES
+-------------------------------------------------------------------------
+Attacking
+    - Added double-shot mechanic: much larger hit radius
+    - Adjusted distance-based hit detection to be more forgiving at closer range and less forgiving at maximum range
+    - Decreased range from 25m to 20m
+    - Decreased max charge time from 1s to 0.75s
+    - Improved hit detection when players are just around corners (with the hitbox peeking out)
+    - Fixed bullets sometimes being blocked by thin obstacles even though the player was within the spread of the shot
+    - Fixed shooting people through thin walls when close to max range
+Misc
+    - Added new sfx for kills
+    - Decreased burst stress cost multiplier from 1.2x to 1.0x, (for reference odm is 0.8x)
+    - Changed to consume gas at a rate halfway between odm and ts (was previously the same as ts)
+    - Improved gunshot vfx to be more visible and more accurate to the distance the shot actually travels
+    - Fixed arm IK being really janky when underneath the hooks and other situations
+
+THUNDERSPEAR CHANGES/FIXES
+-------------------------------------------------------------------------
+Attacking
+    - Added double-shot mechanic: larger blast radius, increased minimum and maximum travel distance
+    - Added embedding mechanic: spears that hit obstacles will stick into them and explode after 2s if not manually detonated within that time
+    - Enabled dodge rolling and bursting while a spear is active either in the air or embedded
+    - Changed impale hit radius to be a bit larger, with double shots impale radius being a bit larger than single
+    - Decreased acceleration duration from 2 seconds to 1 second, so the spear reaches its top speed much faster
+    - Decreased charge time from 0.55s to 0.33s
+    - Decreased spear travel speed from 250m/s to 150m/s
+    - Increased single spear min range from 13.5m to 26.5m
+    - Increased stress cost from firing by 25%
+    - Changed spear detonation kill volume to grow over short duration rather than immediately detect the full radius
+    - Improved spear blast hit detection by checking around objects instead of just checking in a straight line players
+    - Fixed spears travelling through walls after an impale if the target was standing up against or near the wall when hit
+    - Fixed spear suicides not considering obstacles correctly and so always killing you if you were within the blast radius
+    - Fixed detonations being able to go through thin walls if the target was standing up against the other side
+Misc
+    - Added new sfx for impale kills
+    - Added better detonation force that sends ragdolls flying in the correct direction (was random before), and also adjust force based on distance to the blast
+    - Added lights to spear detonation effects
+    - Improved detonation vfx to look fuller and better match the size of the actual spear explosion (for single and double)
+    - Improved TS aim-delay issue by having the player look direction sync to the server twice as often (for stable connections)
+    - Changed TS burst stress cost multiplier from 1.25x to 1.2x
+    - Fixed spear launch sfx being played twice which caused some pretty ugly volume amplification
+    - Fixed spear thrust vfx being stopped immediately when the spear detonates, rather than the particles fading out normally 
+    - Fixed spear detonations being able to kill players through walls when they shouldn't
+    - Fixed spear detonations wrongly thinking they were parryable, which added a few frames of unnecessary delay before kills occurred
+
+OPTIMIZATIONS
+-------------------------------------------------------------------------
+    - Added IK culling to prevent expensive IK from running on players you cant see (cpu)
+    - Added more culling of behaviours on players when the player is far away from you (cpu & gpu)
+    - Added static batching of assets to each map (cpu)
+    - Reduced player bandwidth usage by more than half (network)
+    - Reduced the scoreboard and round clock bandwidth usage when updating to clients (network)
+    - Optimized some inefficiencies with accessing saved user settings and hook targeting checks (cpu)
+    - Optimized player death vfx and gas trail vfx logic and do proper distance-based culling (cpu)
+    - Improved occlusion culling on most maps to allow for more occluded objects (gpu)
+    - Removed post-processing fog effect on Caves map which caused performance issues on some GPUs (gpu)
+
+GENERAL NEW/CHANGES
+-------------------------------------------------------------------------
+Mechanics
+    - Added ability when reloading apg and ts to choose which side to reload by holding down R and clicking LMB or RMB 
+    - Added new reload animations for all classes and changed reload timings for each of the weapons (apg slowest, ts middle, odm fastest)
+    - Added new button (X) for toggling nametags at any distance on teammates (when on a team), or on all players (when spectating)
+    - Added 'reflaring' feedback to the eventfeed and sidebar announcement; reflares occur when a player is flared while already flared
+    - Increased and rebalanced stress recharge rates for weapons
+    - Changed landing animation to only trigger when holding down custom key for it, and will now always trigger regardless of contact angle or speed
+    - Changed soft-landing animation to play whenever landing at low horizontal speed, but without causing any locking up of the player
+    - Changed bursts to no longer be interrupted when passing over a surface even when the trajectory is mostly parallel to the surface
+Visuals & Effects
+    - Added new sfx for player deaths
+    - Changed character and weapon outlines to be less thick to make things cleaner
+    - Changed character LoD 0 to 1 transition to happen at a bit further out to minimize visible popping a bit
+    - Changed hook launch VFX to have a distortion impulse effect
+    - Improved death vfx to handle detecting and sticking to surfaces much better, more reliably, and more dynamically
+    - Improved gas trail vfx to respond to player motion more consistently
+Misc
+    - Added Erwin as a playable character
+    - Added Historia as a playable character
+    - Added chat logging (as server) to write the messages in the game chat to a text file (intended for use by server scripts)
+    - Added commands to enable/disable chat logging and to configure the number of old logs to store before deleting
+    - Added team change queueing when swapping while alive to address team-swapping exploits
+    - Added proper clamping to ragdoll velocities and adjust angular momentum to be better looking in relation to impacts
+    - Changed player velocity and view data to sync twice as often; these are used by the server for stuff like prediction
+    - Changed ammo resupply to allow holding down the interact key like the way gas refueling works
+    - Increased ammo resupply time interval to account for the hold-to-resupply change allowing for faster resupplying
+    - Removed ability to select current class in swapping stations
+    - Updated tutorial menu with new thumbnails and links to the correct videos
+
+GENERAL FIXES
+-------------------------------------------------------------------------
+Mechanics
+    - Fixed the player being able to upburst when directly beneath an obstacle, which could cause them to fall through the ground
+    - Fixed player model clipping into the floor when down bursting on the edge of an object
+    - Fixed being able to use hooks during apg reload anims if triggered at the start of an acrobatic spin animation
+    - Fixed instant flare exploit (anim skip) by binding the flare key to the same key as Ready Attack
+    - Fixed poise having an unexpected extended cooldown if the ready attack button was pressed during an attack
+    - Fixed being able to charge an attack while your hook is travelling to the target even if the attack requires no hook
+    - Fixed a variety of swinging related exploits as swinging no longer adds momentum (now only preserves existing momentum)
+    - Fixed 'elevator' effect when jumping with a hook out
+    - Fixed jump animation sometimes playing late after jumping out of a hard landing
+    - Fixed burst animations entering invalid transitions in some cases and resulting in a really awkward floaty animation bug
+    - Fixed post-attack auto hook firing not working correctly most of the time
+    - Fixed reload timings not syncing with animation, causing the character to lockup briefly after the end of the reload anim
+    - Fixed up, down, and side bursts costing gas and stress and playing sfx even when the burst is unable to start
+    - Fixed flare exploits that allowed immediate flaring when starting a sword lunge or dodge rolling if the flare was fired on the same frame
+Misc
+    - Fixed being able to enter resupply animation during flybys of stations by requiring being in the zone for a short time first
+    - Fixed round timer clock briefly showing the wrong time when a round or match is starting
+    - Fixed issue that caused reel out effects to break on servers that had been open for a while
+    - Fixed ragdolls going into T-pose on the first frame that they activate
+    - Fixed exploit where pressing the interact and poise button on the same frame allowed you to use your weapon and interact with the station at the same time
+    - Fixed issue where resupply stations close to each other would make the interact UI stuck
+    - Fixed being able to join a team/select char to trigger match start, then switch off to spectator but still have the match begin
+    - Fixed gear swapping with empty swords (after throwing) resulting in fully loaded guns or spears rather than empty
+    - Fixed issue with team auto-shuffle that could spawn players on their new team with the old team's equipment settings
+    - Fixed active ragdolls and flares created pre-match persisting into the first round
+    - Fixed (sort of) a very rare bug that could happen when spawning in (now will be returned to main menu if it happens)
+    - Fixed flares carrying over to the next round for a single frame, which could result in flare messages being wrongly triggered
+    - Fixed landing animations not playing all the time on remote players (animation should now play on other players as expected)
+
+MODE CHANGES/FIXES
+-------------------------------------------------------------------------
+    - Added round timer to FFA Elimination
+    - Added draw rules to FFA Elim: last man standing -> most kills -> tied for most
+    - Added draw rules to Team Elim: last team standing -> most living players -> tied for most
+    - Added draw rules to Regicide: last team standing -> last team king standing -> most team kills -> tied for most
+    - Added additional Regicide objective notification when a king is reflared (same message as when the king is flared initially)
+    - Added additional Regicide objective notification when a king's flare expires
+    - Changed default FFA & Team Elim and Regicide round time to 3 minutes
+    - Changed Regicide default flare settings for range, duration, cooldown from (short, def, def) to (def, short, short)
+    - Fixed team eliminated message wrongly triggering at the start of a 3 or 4 team elimination round
+    - Fixed racing bug that caused non-hosts to suddenly jerk downwards at certain distances
+
+MAP CHANGES/FIXES
+-------------------------------------------------------------------------
+    - Added Underground City (Slums) map
+    - Added new watchtower and palisades assets, along with more trees, on Utgard to better fill out the map center and sides
+    - Modified the windmill area a bit on Forest
+    - Updated map easter egg placements on all maps
+    - Fixed a bunch of collision issues on all maps
+    - Fixed a bunch of occlusion culling issues on all maps
+    - Fixed a bunch of mesh clipping issues on all maps
+    - Fixed a bunch of training dummy clipping on all maps
+    - Fixed some weird spawn points on all maps
+
+CAMERA CHANGES/FIXES
+-------------------------------------------------------------------------
+Spectating
+    - Added perspective-locked spectator camera that is toggled on and off with the LCtrl key while spectating a player
+    - Changed spectating to allow for any player to be spectated when you are on an eliminated team in a 3 or 4 team game
+    - Disabled cable flyby sfx on the player that is being spectated to avoid sound spam
+    - Fixed indicator and nametag HUD of the player you are spectating flickering for a frame when you switch to another player
+Camera
+    - Added fog falloff with height when going above the top of a map (will fade out to no fog as you go higher)
+    - Added feature to allow quick-following the player you are looking at by pressing the middle mouse button while spectating
+    - Added 5 vantage locations in each map, accessible when spectating by using the 1 to 5 keys
+    - Added PrintCameraKeys command to display info on all the fixed keybinds to control the camera and what they do
+    - Added camera speed control with scroll wheel (only when in freecam), multiplier displayed in bottom left when changed
+    - Added adjustable camera rotation and movement dampening (Hold left alt and scroll to adjust)
+    - Improved camera shifting around thin objects when playing with a camera offset
+    - Improved camera collision when colliding with steep slopes that the player is standing on
+    - Changed free camera to now use the FOV assigned in the user settings (was always 60 before)
+    - Changed free camera follow distance to persist within a session (ie. will remain the same if you spawn and die again)
+    - Fixed various camera clipping issues relating to collision handling
+    - Fixed issue where the camera could completely clip through ceilings when the character was at an angle to it
+    - Fixed free camera movement being faster on diagonals (2 or 3 directions at once) so now all movement is the same speed
+
+SERVER SETTINGS CHANGES
+-------------------------------------------------------------------------
+    - Added two more options to match limits for modes in the server settings for finer tuning (its 5 options instead of 3 now)
+    - Added round timer server setting to adjust round length in modes that have a round timer (ffa elim, team elim, regicide, infection)
+    - Added 'Allow Freecam' server setting to enable forcing dead players on teams to only fixed-spectate their teammates
+    - Added 'RestartRound' command: will cleanly restart the round without awarding any points and will rollback the scoreboard as well
+    - Increased max player count from 16 players to 24 players
+
+USER SETTINGS CHANGES
+-------------------------------------------------------------------------
+    - Added notice text on Keybinds settings menu to indicate that fixed camera keys can be found via the new command
+    - Added custom keybind for the hard landing action, rather than using the ReelOut button (defaults to LCtrl as well though)
+    - Added additional burst sensitivity levels to the lower end and change text in menu to show the ms of sensitivity for more context
+    - Added red text color change to interaction HUD when interaction is unavailable (ie. already full ammo/gas)
+    - Added several new crosshair styles
+    - Added more crosshair scale options (+/-50% rather than 25% as before)
+    - Changed crosshair opacity slider to use 5% increments rather than 10% for consistency with other settings
+    - Changed the display name of mouse buttons to add 1 to the number, so LMB is now Mouse1 rather than Mouse0, etc
+    - Changed camera sensitivity slider to change in increments of 5% instead of 10%
+    - Changed flare duration times for short, default, long from (15, 30, 45) to (15, 25, 35) seconds
+    - Changed the hosting menu settings layout to be a bit cleaner and more accommodating for additional server settings
+
+HUD & UI CHANGES/FIXES
+-------------------------------------------------------------------------
+Chat
+    - Added language support to game chat messages for thai, cyrillic, greek, devanagari, japanese, korean, and full latin support
+    - Changed chat box to now only scroll down for a new message when already at the bottom
+    - Changed chat box scrolling to be consistent for any number of messages
+    - Fixed chat message html filtering to only remove actual html tags and not all < and > (so <3 works), and re-allow special characters
+Menu & Lobby
+    - Added Twitch and TikTok redirect buttons to the main menu
+    - Added dialog popup on game load when version is out of date to redirect to download page
+    - Added message to top of lobby browser when game version outdated to indicate that most lobbies will not be found
+    - Changed browser lobby name filter to match if contained in the name, instead of only if the name starts with the filter
+    - Changed default lobby filters to be maximally inclusive (show passwords and all regions)
+    - Fixed prohibited weapons in character select menu being interactable (sfx & highlighting) despite not actually being selectable
+    - Fixed regiment names in the hosting menu not appearing with full names (eg. was Trainee rather than Training Corps)
+    - Fixed issue where the Host button on the Play Offline menu would be pressable before the necessary start up checks where finished
+    - Fixed issue with LAN connect failing to recognize when invalid IP addresses were entered
+Player Indicators
+    - Increased enemy indicator UI range from 25m to 40m
+    - Increased flared indicator UI range to maximum so its always visible (could disappear sometimes on large maps)
+    - Improved player spotted hud icon accuracy when players are just barely visible or not visible behind something
+    - Fixed indicator and nametag HUD of the player you are spectating flickering for a frame when you switch to another player
+    - Fixed HUD indicators for a player disappearing on the player if you were spectating them before you spawned
+Misc
+    - Added ToggleCoordDisplay command to show x,y,z map coordinates in bottom left corner of the screen
+    - Added crosshair icon support for showing when hooks are unable to be used (turns red)
+    - Added new event feed icons for spear parries (single and double), double apg kill/parry, double impale/detonation
+    - Added support for speed display to show spectated players speed stats (can be imprecise depending on the player's connection)
+    - Improved FPS display to be more accurate and removed the deltatime display mode
+    - Changed the splithook hook icons to lock onto active hook anchor positions when the hook is active
+    - Changed all character vfx colors to be better balanced
+    - Changed interaction HUD to only appear when actually interactable rather than just when you are within the zone
+    - Fixed compass rotating in the wrong direction when moving the camera around
+    - Fixed character render display in selection menu showing transparent lines on character due to outlines not rendering correctly
+
+
+
+
+1.786
+June 27th, 2021
+
+CONNECTIVITY AND NETWORKING
+-------------------------------------------------------------------------
+    - Added dialog messages sent to connecting clients who are refused to explain why (incorrect password, banned, etc.)
+    - Added maximum step increases for ping and jitter to smooth out potential ping spiking
+    - Added maximum limit to ping and jitter values as 999 and 99 respectively
+    - Added additional smoothing to reported jitter to avoid short instability issues
+    - Added NAT downgrading from Open to Moderate if hosting an Open server but clients fail to direct connect
+    - Changed server quality to also consider the connection quality of all users (as an average) to indicate the server health
+    - Changed player network data updating to be locked to 30hz to significantly reduce bandwidth usage
+    - Increased unstable connection threshold to reduce the number of unnecessary kicks
+    - Fixed some UPnP issues that were causing opened ports to close shortly after being opened on some routers
+    - Fixed connection punching which would always fail on the first attempt and so have a much lower success rate than expected
+    - Fixed hard-lock that could occur if a server closed while you were punching at it
+
+HOSTING
+-------------------------------------------------------------------------
+    - Added server command interface accessible from in-game menu to manage kicks, mutes, & bans
+    - Added NAT host restriction information based on user NAT type to the hosting menu
+    - Changed hosting menu server commands message to mention the actual command menu
+    - Changed hosting menu to update the default lobby name to your current username
+    - Fixed issue where multiple teams could be selected in offline games
+    - Fixed FF, autobalance, and autoshuffle settings being interactable for offline games
+    - Fixed server password not persisting over changed games
+
+SERVER BROWSER
+-------------------------------------------------------------------------
+    - Added filtering for showing only servers that allow unstable (as well as the option for only kick unstable)
+    - Added more lobby and player search result context to the browser, as well as info about rejected lobbies
+    - Added persistent storage for lobby filter settings so that filters will be saved across sessions
+    - Added NAT type to browser with filtering options for different restriction levels
+    - Changed 'Hide Passwords' filter setting to be on by default
+    - Changed ping limit filter to be a minmax slider to define a range of filtered pings rather than just a maximum
+    - Changed lobby displayed player count to be based on clients who have actually joined the game successfully
+    - Fixed browser quality filter dropdown appearing below rather than above the button for some reason
+    - Fixed issue where server browser rows were not being colored correctly after changing filters
+    - Fixed error when parsing lobbies that could cause the server browser to fail to load any servers
+    - Fixed issue with 'hide allows unstable' option affecting the servers that would be returned by the search
+    - Fixed quality filter sorting using alphabetical ordering rather than actual quality ordering
+    - Fixed ping limit sorting so that None is the highest value rather than the lowest
+    - Fixed rich text on server browser rows (ie. no more colour text in lobby names)
+    - Fixed being able to put emojis into lobby names (:zeke_unamused:)
+    - Fixed lobby browser UI not displaying correctly on non 16:9 resolutions (should work on all standard resolutions)
+
+GAMEPLAY
+-------------------------------------------------------------------------
+    - Changed landing mechanic to be near-instant and so more useful for actually landing on things without bouncing off
+    - Reduced the number of created bullet impact FX by half to improve performance
+    - Optimized VFX/SFX system to allow many more effects to be pooled and ensure they are processed in constant time
+    - Increased sword durability costs when hitting players and offensive parrying
+    - Fixed exploit when refueling gas where it was possible to refuel while being in a mobile/combat-ready state
+    - Fixed exploit when reloading apg shots where it was possible to reload the gun while the corresponding hook was engaged
+    - Fixed exploit where you could fire off a flare immediately with no animation if fired exactly when landing
+    - Fixed exploit with sword lunge that could result in throwing blades not consuming ammo
+    - Fixed sword lunge while side or back bursting causing the player rotation to break during the lunge
+    - Fixed sword lunge being able to continue to hit targets after the blades break
+    - Fixed exploit with spears and sword throws that could allow them to be requested while not in the attack animation
+    - Fixed projectile and apg attacks being able to hit players through walls if the player's hitbox was poking through
+    - Fixed reload bug which caused the player to incorrectly reload both weapons when they should only reload one
+    - Fixed the weird, sudden teleportation bug when shooting hooks that would cause the player to move really fast
+    - Fixed gear swap station queueing the weapon change rather than immediately swapping when playing at a higher ping
+    - Fixed bursting slow-mo animation bug that could occur when colliding during a burst
+
+HUD/UI
+-------------------------------------------------------------------------
+    - Added lobby name, region, and current/max player count to the top right of the scoreboard
+    - Added visual displays for team weapon permissions on the team selection menu
+    - Added improved text display for spectating players to now clearly indicate the team of the player
+    - Changed player name text coloring for event feed to have better brightness/visibility in the colours
+    - Fixed compass labels for east and west being swapped
+    - Fixed spectate hud not properly hiding when the player being followed is killed
+    - Fixed rare exception when loading into a game that could cause the score display meter to fail to update
+
+MODES
+-------------------------------------------------------------------------
+    - Added round-wait player spawning so that players can be spawned in while they wait for more players to join
+    - Fixed being able to spectate enemy players in Team Elimination
+    - Fixed being able to respawn in Team Elimination if you died/suicided within the first 2 seconds of the round
+    - Fixed Infection exploit with swapping teams by selecting spectator and auto-assign repeatedly during a round
+    - Fixed Infection wrongly spawning players on Infected after they switch to spectator
+    - Fixed Infection always spawning late-joiners on Hunted
+    - Fixed rare exception when loading into a game while a projectile was being created
+    - Fixed rounds sometimes not restarting do to an error with the effects system
+
+MAPS
+-------------------------------------------------------------------------
+    - Fixed some gaps between buildings on the City that could be squeezed into
+    - Fixed some areas on City and Forest that could be forcibly clipped into and get the player stuck
+    - Fixed a couple bad spawn points on City that were spawning players inside the base of towers
+    - Fixed hole in collision mesh of hollow building in City map that allowed players to phase through the wall
+    - Fixed gaps in colliders on City (HQ area entrance) and Forest (ruined cabin)
+    - Fixed a bunch of collision issues on Forest that could be used to get under objects and under the map
+
+CHAT
+-------------------------------------------------------------------------
+    - Increased chat box width and adjusted the server message color to be a bit transparent (less distracting)
+    - Changed chat scale user options to have more of an effect (previously it barely adjusted the size)
+    - Changed chat messages to not be printed at all when chat messages are disabled (rather than showing 'hidden')
+    - Fixed chat message displaying placeholder content if an error had occurred when loading into the game
+    - Fixed chat message scaling issue that could occur if changing resolution mid-game
+
+CONSOLE
+-------------------------------------------------------------------------
+    - Added 'PrintServerInfo' command to log information to console about the server you are in
+    - Added 'AbortStartup' command, to immediately end startup checks (to resolve potential soft-locks)
+    - Added 'EnableUPnP' and 'DisableUPnP' commands to toggle UPnP checking at startup on or off
+    - Added 'MyNat' command to display information about your NAT status (also is displayed in console after startup)
+    - Added 'EnableOpenNatChecks' and 'DisableOpenNatChecks' commands to toggle the connectivity/firewall testing on or off
+    - Changed 'List' command to also work on clients
+    - Changed utility commands to only be runnable from the main menu and when no other command is active
+    - Fixed several issues with banning where there was inconsistency across ban methods
+    - Fixed OpenLogFile and OpenLogFolder commands which now either succeed to open or fail gracefully (won't work on mac)
+
+GAME/USER SETTINGS
+-------------------------------------------------------------------------
+    - Added max framerate setting which can limit the game framerate to a specific value
+    - Added 5 new regions: US Central, Central America, Europe West, Europe East, Asia Central, Asia Southeast
+    - Added user option for AttackZoomStrength (Off, Half, Full) to give some control over how much the camera zooms
+    - Decreased minimum allowable camera sensitivity (slightly)
+    - Changed username restrictions text in settings menu to be more descriptive
+    - Changed keybind naming for number keys to just show the number without the 'alpha' prefix
+    - Changed quality settings for Low and Medium to have better LOD biasing and texture/shadow quality (better performance)
+
+MAIN MENU
+-------------------------------------------------------------------------
+    - Added framerate capping to 60fps while on main menu
+    - Added Connection Tips window openable from main menu
+    - Changed Strict/Unknown NAT warning message to stop showing if the game port has been opened
+    - Changed Strict/Unknown NAT warning message to include some info for how to address issues
+    - Changed the position and size of the main menu loader display to be more visible
+    - Fixed NAT warning messages not actually fitting inside the dialog window
+    - Fixed 'i' character not rendering properly in UI text on Turkish machines
+    - Fixed multiple 'join failed' dialogs appearing every time the menu was reloaded
+    - Fixed UPnP check running every time the game launched due to a data serialization error
+
+GAME STARTUP
+-------------------------------------------------------------------------
+    - Added dialog at startup if EOS SDK has not been created properly
+    - Added external port checking to determine if your game is reachable
+    - Added warning message when the game port is open but a firewall is detected
+    - Changed version and nat type checks to only run on game startup
+    - Changed UPnP port open attempt to only run if the port isn't already open
+    - Changed startup console logging to provide more useful information
+    - Changed startup checks sequence and port operations to run much more quickly
+    - Changed startup checks to allow opening the host and find game menus while running
+    - Fixed EOS error when starting up game that would cause a soft-lock
+    - Fixed bug with loading ban list on startup that caused bans to not be persistent
+
+
+
+
+1.753
+May 8th, 2021
+
+Initial release!

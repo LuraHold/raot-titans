@@ -1,3 +1,7 @@
 bin/
 obj/
 *.user
+game/**/MelonLoader/Latest.log
+game/**/MelonLoader/Latest-Bootstrap.log
+game/**/*.log
+game/**/UserData/MelonStartScreen/

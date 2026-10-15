@@ -16,6 +16,11 @@ dotnet build -c Release
 copy bin\Release\net472\Titans.dll X:\Downloads\raot_2.086_windows\Mods\
 ```
 
+## Estado ao fim de 2026-10-15 (Jeff parou por hoje)
+- Rodada 7 instalada e NÃO validada: cápsula do titã na layer do jogador (rodada 6 caía pelo chão: layer do chão não colide com chão). Olhos/cabelo rígidos ao head e física Rigidbody também sem validação visual.
+- Jogo completo subiu pro repo em `game/raot_2.086_windows/` (com MelonLoader + mod + assets). README.md robusto pra equipe.
+- Próximo ao retomar: Jeff roda TESTPLAN F0 (olhos, cabelo, colisão com chão/paredes, textura); depois F1 (VFX, ragdoll, balanceamento, HUD).
+
 ## Referência obrigatória: dump do AoTTG2
 `X:\Downloads\rea-tools\aottg2-dump\dump.cs` (Il2CppDumper no GameAssembly do AoTTG2). Antes de inventar mecânica de titã, LER como o AoTTG2 faz: `BaseCharacter` (física, GroundMask, SetKinematic), `BaseTitan` (Run/Walk/Jump/Grab/Eat, StateAction, DisableArm, CheckGround, TitanColliderToggler), `BasicTitanSetup` (olhos/cabelo por variante). Lição do Jeff: 2 tentativas falhas = parar e pesquisar a referência.
 
