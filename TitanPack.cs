@@ -175,6 +175,7 @@ namespace TitansMod
                     texCache[file] = null;
                     return null;
                 }
+                try { t.name = file; } catch { }
                 Log("textura ok: " + file + " " + t.width + "x" + t.height);
                 texCache[file] = t;
                 return t;
@@ -252,26 +253,8 @@ namespace TitansMod
         {
             if (texturedShaderSearched) return texturedShader;
             texturedShaderSearched = true;
-            // 1) personagens em cena (skinned, com certeza texturizados)
-            try
-            {
-                foreach (var o in Object.FindObjectsOfType(Il2CppType.Of<SkinnedMeshRenderer>()))
-                {
-                    var smr = o.TryCast<SkinnedMeshRenderer>();
-                    if (smr == null) continue;
-                    if (smr.transform.root != null && smr.transform.root.name.StartsWith("TITAN")) continue;
-                    var m = smr.sharedMaterial;
-                    if (m == null || m.shader == null) continue;
-                    Texture mt = null;
-                    try { mt = m.mainTexture; } catch { }
-                    if (mt == null) continue;
-                    texturedShader = m.shader;
-                    Log("shader texturizado (personagem): '" + m.shader.name + "'");
-                    return texturedShader;
-                }
-            }
-            catch (Exception e) { Log("FindTexturedShader/smr: " + e.Message); }
-            // 2) material texturizado mais comum carregado
+            // Pontua cada shader de material texturizado: queremos o dos PERSONAGENS (usa UV da malha),
+            // nunca o dos prédios ("WorldUV"/triplanar projeta no espaço do mundo e vira mancha).
             try
             {
                 var counts = new Dictionary<string, int>();
@@ -285,18 +268,31 @@ namespace TitansMod
                     try { mt = m.mainTexture; } catch { }
                     if (mt == null) continue;
                     string n = m.shader.name ?? "";
-                    if (n.Contains("UI") || n.Contains("Sprite") || n.Contains("Particle") || n.Contains("Skybox") || n.Contains("Hidden") || n.Contains("TextMesh")) continue;
                     int c; counts.TryGetValue(n, out c); counts[n] = c + 1;
                     byName[n] = m.shader;
                 }
-                string best = null; int bestC = 0;
-                foreach (var kv in counts) if (kv.Value > bestC) { bestC = kv.Value; best = kv.Key; }
+                var listing = new System.Text.StringBuilder();
+                string best = null; int bestScore = int.MinValue;
+                foreach (var kv in counts)
+                {
+                    string n = kv.Key; string l = n.ToLowerInvariant();
+                    listing.Append(n).Append("=").Append(kv.Value).Append("; ");
+                    int score = 0;
+                    // vetos absolutos: nunca usar
+                    if (l.Contains("worlduv") || l.Contains("triplanar") || l.Contains("world")) continue;
+                    if (l.Contains("ui") || l.Contains("sprite") || l.Contains("particle") || l.Contains("skybox") || l.Contains("hidden") || l.Contains("textmesh") || l.Contains("gui") || l.Contains("unlit") || l.Contains("terrain") || l.Contains("water") || l.Contains("fx") || l.Contains("line") || l.Contains("blit")) continue;
+                    if (l.Contains("toon") || l.Contains("cel") || l.Contains("character") || l.Contains("skin") || l.Contains("cloth") || l.Contains("player")) score += 300;
+                    if (l.Contains("diffuse") || l.Contains("lit") || l.Contains("standard")) score += 100;
+                    score += Math.Min(kv.Value, 50);
+                    if (score > bestScore) { bestScore = score; best = n; }
+                }
+                Log("shaders texturizados carregados: " + listing);
                 if (best != null)
                 {
                     texturedShader = byName[best];
-                    Log("shader texturizado do jogo: '" + best + "' (" + bestC + " materiais)");
+                    Log("shader escolhido pro titã: '" + best + "' (score " + bestScore + ")");
                 }
-                else Log("nenhum material texturizado encontrado pra copiar o shader");
+                else Log("nenhum shader texturizado adequado; usando Standard");
             }
             catch (Exception e) { Log("FindTexturedShader: " + e.Message); }
             return texturedShader;
@@ -326,9 +322,19 @@ namespace TitansMod
             }
             if (m == null) throw new Exception("nenhum shader disponível");
             try { if (tex != null) m.mainTexture = tex; } catch (Exception e) { Log("mainTexture falhou: " + e.Message); }
-            try { if (tex != null && m.HasProperty("_MainTex")) m.SetTexture("_MainTex", tex); } catch { }
+            // shaders custom podem usar outro nome de slot
+            string[] slots = { "_MainTex", "_BaseMap", "_BaseColorMap", "_Albedo", "_Diffuse", "_Texture", "_Tex", "_BaseTex" };
+            foreach (var s in slots) { try { if (tex != null && m.HasProperty(s)) m.SetTexture(s, tex); } catch { } }
             try { m.color = tint; } catch { }
-            if (!loggedShader) { loggedShader = true; Log("shader do titã: " + (m.shader != null ? m.shader.name : "?") + ", textura " + (tex != null ? "ok" : "NULA")); }
+            try { if (m.HasProperty("_BaseColor")) m.SetColor("_BaseColor", tint); } catch { }
+            try { m.mainTextureScale = Vector2.one; m.mainTextureOffset = Vector2.zero; } catch { }
+            if (!loggedShader)
+            {
+                loggedShader = true;
+                string got = "?";
+                try { got = m.mainTexture != null ? m.mainTexture.name : "NULA"; } catch { }
+                Log("shader do titã: " + (m.shader != null ? m.shader.name : "?") + ", mainTexture=" + got);
+            }
             return m;
         }
     }

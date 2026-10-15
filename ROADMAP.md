@@ -21,7 +21,9 @@ Bugs reportados pelo Jeff em 2026-10-15:
 - [x] Ganchos do ODM grudarem no corpo do titã (colliders em 11 ossos, layer do chão; raycast de chão do mod ignora titãs). Rodada 2: tamanhos convertidos pra METROS via lossyScale (rig Blender tem escala acumulada; colliders gigantes prendiam o jogador em cima do titã).
 - [x] F11 "céu livre" (desliga colliders ceiling/boundary/barrier/killbound; religa no 2º toque).
 - [x] Bola vermelha da nuca removida do modelo real (alvo é conhecido).
-- [ ] Rosto/boca/expressão: a textura do AoTTG2 TEM rosto, olhos e dentes; o corpo saiu liso = textura não aplicada. Instrumentado auto-teste no boot (decodificação PNG + shader); corrigir conforme o log.
+- [ ] Rosto/boca/expressão: a textura do AoTTG2 TEM rosto, olhos e dentes; PNG decodifica (1024²) e UVs ok. Rodada 1 copiou o shader errado (`Custom/Development/DiffuseWorldUV`, dos prédios, projeta no mundo → mancha azul). Rodada 2: escolha por pontuação (prioriza toon/character, veta WorldUV) + grava no log a lista de shaders do jogo pra cravar o certo.
+- [x] Corte na nuca por proximidade REMOVIDO no modelo real: titã agora é `Strikeable` com 5 `StrikePoint` (nuca, 2 pulsos, 2 joelhos) registrado no combate do jogo; só morre com acerto real da lâmina (`OnHit`). Pontos = velocidade no impacto × precisão (distância do ponto de impacto ao centro da nuca).
+- [x] Devorada: morte só quando a mão com o jogador chega na `MouthHitbox` (antes matava em 4,6s fixos, no meio do "te olha").
 - [ ] Atravessar casas/árvores: implementado desvio por raycast no peito (contorna), saltador pula, e durante a caça quebra objetos pequenos (cerca, barraca, casinha < 90% da altura; nunca terreno/estrada). Validar no City e Forest.
 - [ ] Calibrar: altura padrão (~7 jogadores ≈ 12m), alcance de patada/agarrão.
 **Aceite:** 15 min de sessão com waves sem nenhum bug visual; titã parece nativo do jogo; gancho gruda; dá pra voar sem teto.

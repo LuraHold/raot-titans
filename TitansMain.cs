@@ -6,6 +6,8 @@ using UnityEngine;
 using UnhollowerRuntimeLib;
 using Player;
 using AoTGameEngine.Character;
+using AoTGameEngine.Strikeables;
+using AoTNetworking.Game.Projectiles;
 using Object = UnityEngine.Object;
 using GameCmds = AoTGameUI.Console.Commands.Game.GameCommands;
 
@@ -59,6 +61,12 @@ namespace TitansMod
             public float actionUntil;      // enquanto Time.time < isto, clip de ação tem prioridade
             public float avoidHeading;     // rumo de desvio de obstáculo
             public float avoidUntil;
+            // sistema de golpe REAL do jogo
+            public Strikeable strikeable;
+            public StrikePoint[] points;   // 0 nuca, 1 pulso L, 2 pulso R, 3 joelho L, 4 joelho R
+            public float[] baseRadii;
+            public bool leviApplied;
+            public Transform mouth;
             public float pendingPushAt;    // hora de aplicar o empurrão da patada
             public bool screamed;
         }
@@ -376,6 +384,75 @@ namespace TitansMod
             return result;
         }
 
+        // Registra o titã no sistema de combate do jogo: a lâmina do jogador precisa ACERTAR o ponto.
+        private void SetupStrikeable(Titan t, float heightM)
+        {
+            try
+            {
+                var sk = t.root.AddComponent<Strikeable>();
+                sk.isPlayer = false;
+                Transform[] anchors = { t.napeAnchor, t.wristL, t.wristR, t.kneeL, t.kneeR };
+                string[] titles = { "Nuca", "Pulso L", "Pulso R", "Joelho L", "Joelho R" };
+                float[] radii = { heightM * 0.075f, heightM * 0.055f, heightM * 0.055f, heightM * 0.06f, heightM * 0.06f };
+                var pts = new StrikePoint[anchors.Length];
+                for (int i = 0; i < anchors.Length; i++)
+                {
+                    var p = new StrikePoint();
+                    p.SetTransform(anchors[i]);
+                    p.SetTitle(titles[i]);
+                    p.SetRadius(radii[i]);
+                    p.SetValidAttacks(AttackType.Everything);
+                    p.IsTargetable = true;
+                    pts[i] = p;
+                }
+                sk.LoadNewStrikePoints(pts);
+                var captured = t;
+                sk.add_OnHit(DelegateSupport.ConvertDelegate<Strikeable.StrikepointHitEvent>(
+                    new Action<StrikeableHit, AttackType, bool, MirrorProjectile>((hit, type, special, proj) => OnTitanStruck(captured, hit, type))));
+                t.strikeable = sk; t.points = pts; t.baseRadii = radii;
+            }
+            catch (Exception e) { LoggerInstance.Warning("Strikeable do titã falhou (cai no modo proximidade): " + e.Message); }
+        }
+
+        private void OnTitanStruck(Titan t, StrikeableHit hit, AttackType type)
+        {
+            try
+            {
+                if (t == null || t.root == null || t.state == TitanState.Dying || t.kind == TitanKind.Ally) return;
+                var sp = hit.strikePoint;
+                if (sp == null) return;
+                int idx = sp.Index;
+                float speed = PlayerVelocity().magnitude;
+                float dist = Vector3.Distance(hit.hitPoint, sp.Position);
+                float radius = Mathf.Max(0.1f, sp.HitRadius);
+                switch (idx)
+                {
+                    case 0:
+                        CutNape(t, speed, dist, radius, cfgCutSpeed.Value * (LeviActive() ? 0.5f : 1f));
+                        break;
+                    case 1:
+                    case 2:
+                        bool right = idx == 2;
+                        if (right ? t.armRGone : t.armLGone) return;
+                        bool wasGrab = t.state == TitanState.Grab && t.grabHand == (right ? t.handR : t.handL);
+                        SeverArm(t, right);
+                        if (wasGrab) { Announce("ESCAPOU cortando o braço! +40 pts"); totalScore += 40; PushPlayer(Vector3.up * 10f); StunTitan(t); }
+                        break;
+                    case 3:
+                    case 4:
+                        if (t.state != TitanState.Stunned) StunTitan(t);
+                        break;
+                }
+            }
+            catch (Exception e) { LoggerInstance.Error("OnTitanStruck: " + e.Message); }
+        }
+
+        private void SetPointsTargetable(Titan t, bool on)
+        {
+            if (t.points == null) return;
+            foreach (var p in t.points) { try { if (p != null) p.IsTargetable = on; } catch { } }
+        }
+
         // radius/height em metros no mundo; dividimos pela escala acumulada do osso (rigs do Blender têm escala 0.01/100)
         private void AddHookCollider(Titan t, string bone, float radiusM, float heightM)
         {
@@ -493,6 +570,8 @@ namespace TitansMod
             t.kneeR = boneTr[pack.FindBone("LegRHurtbox")];
             t.armL = boneTr[pack.FindBone("upper_arm.L")];
             t.armR = boneTr[pack.FindBone("upper_arm.R")];
+            t.mouth = boneTr[pack.FindBone("MouthHitbox")];
+            if (kind != TitanKind.Ally) SetupStrikeable(t, desired);
 
             try
             {
@@ -826,8 +905,20 @@ namespace TitansMod
 
                 if (t.kind == TitanKind.Ally && Time.time > erenEndsAt) { StartDeath(t); continue; }
 
-                // cortes do player LOCAL
-                if (localTr != null && t.kind != TitanKind.Ally && age > 0.5f)
+                // Levi: raio dos pontos de golpe maior enquanto a fúria dura
+                if (t.points != null)
+                {
+                    bool levi = LeviActive();
+                    if (levi != t.leviApplied)
+                    {
+                        t.leviApplied = levi;
+                        for (int pi = 0; pi < t.points.Length; pi++)
+                            try { t.points[pi].SetRadius(t.baseRadii[pi] * (levi ? 1.6f : 1f)); } catch { }
+                    }
+                }
+
+                // cortes por proximidade: SÓ no corpo de primitivas (fallback). O modelo real usa o golpe do jogo.
+                if (localTr != null && t.kind != TitanKind.Ally && age > 0.5f && t.strikeable == null)
                 {
                     float dNape = Vector3.Distance(localPos, t.napeAnchor.position);
                     if (dNape < cutRadius && pSpeed > cutSpeed) { CutNape(t, pSpeed, dNape, cutRadius, cutSpeed); continue; }
@@ -1106,7 +1197,7 @@ namespace TitansMod
             if (t.grabHand == null) { SetState(t, TitanState.Chase); return; }
 
             Transform wrist = t.grabHand == t.handR ? t.wristR : t.wristL;
-            if (pSpeed > cutSpeed * 0.55f && Near(localPos, wrist, Mathf.Max(2.5f, cfgCutRadius.Value)))
+            if (t.strikeable == null && pSpeed > cutSpeed * 0.55f && Near(localPos, wrist, Mathf.Max(2.5f, cfgCutRadius.Value)))
             {
                 SeverArm(t, t.grabHand == t.handR);
                 Announce("ESCAPOU cortando o braço! +40 pts");
@@ -1118,11 +1209,12 @@ namespace TitansMod
 
             if (t.usesPack)
             {
-                // 0-2s: animação de agarrar; depois: comer. Morte sincronizada com a mordida.
+                // 0-2s: agarra e levanta; depois: leva à boca. Morte só quando a mão CHEGA na boca.
                 if (held < 2.0f) t.anim.Play("grab.ground.front.r", false);
                 else t.anim.Play("eat.r", false);
                 if (held > 0.5f) HoldPlayerAt(t.grabHand.position);
-                if (held > 4.6f)
+                bool atMouth = t.mouth != null && Vector3.Distance(t.grabHand.position, t.mouth.position) < t.height * 0.1f;
+                if ((held > 3.0f && atMouth) || held > 10f)
                 {
                     Announce("O TITÃ TE COMEU!");
                     PlaySfx(t, clipHit, 1f, 0.4f);
@@ -1209,6 +1301,7 @@ namespace TitansMod
         private void StartDeath(Titan t)
         {
             if (t.napeMarker != null) { try { Object.Destroy(t.napeMarker); } catch { } t.napeMarker = null; }
+            SetPointsTargetable(t, false);
             PlaySfx(t, clipSteam, 0.9f, 0.6f);
             SetState(t, TitanState.Dying);
             if (t.usesPack)
@@ -1226,6 +1319,7 @@ namespace TitansMod
                 if (t.usesPack) arm.localScale = Vector3.one * 0.001f; // colapsa o braço no ombro (malha skinned)
                 else arm.gameObject.SetActive(false);
             }
+            if (t.points != null) { try { t.points[right ? 2 : 1].IsTargetable = false; } catch { } }
             totalScore += 25;
             PlaySfx(t, clipHit, 1f, 0.9f);
             Say("Braço decepado! +25 pts");
