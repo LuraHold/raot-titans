@@ -16,6 +16,15 @@ dotnet build -c Release
 copy bin\Release\net472\Titans.dll X:\Downloads\raot_2.086_windows\Mods\
 ```
 
+## v4 (2026-10-15) — TITÃS DE VERDADE (modelos do AoTTG2)
+- **Pipeline de extração** (`titan-extract/` em X:\Downloads\rea-tools, scripts Python + UnityPy): lê o `resources.assets` do AoTTG2 (Unity 2023, em X:\Downloads\rea-tools\aottg2), exporta o prefab **BasicTitan0**: esqueleto 102 transforms, malhas Body/Head com pesos de skin (pesos vêm de `MeshHandler.m_BoneWeights/m_BoneIndices`, NÃO de m_Skin), bindposes, 5 texturas de pele (vanilla/fat/muscle/medium/skinny) e **19 AnimationClips decodificados** (StreamedClip+DenseClip+ConstantClip, bindings casados por CRC32 do caminho do bone — 168/168 ok) baked a 30fps → formato próprio **TPK1** (`assets/titan.tpk`, ~2MB).
+- Rodar de novo se mudar algo: `python export_titan.py` (gera em TitansMod/assets; copiar pra `<jogo>\Mods\TitansAssets\`).
+- **TitanPack.cs**: loader TPK1 + montagem runtime (bones → GameObjects, Mesh com boneWeights/bindposes, SkinnedMeshRenderer, material Standard/fallbacks com textura via ImageConversion) + **TitanAnim** (player de clips baked com crossfade).
+- **Âncoras nos hitboxes REAIS do rig**: NapeHurtbox (nuca), GrabR/LSocket (mão do agarrão), ForearmR/LHurtbox (corte de pulso), LegR/LHurtbox (joelho), upper_arm.L/R (decepar = escala 0.001).
+- **Clips usados por estado**: idle, run.walk (wander/chase normal), run.abnormal (corredor/aliado), Titanjumping (salto), attack.swing.l/r (patada sincronizada com push em +0.75s), attack.scream (rugido ao avistar), grab.ground.front.r → eat.r (agarrão+devorada, morte em 4.6s), sit_down/idle/getup (stun), die.front/back, crawler.idle/run/die.
+- Variantes por textura: Normal=vanilla/fat, Corredor=skinny, Saltador=medium, Rastejante=muscle, Aliado=vanilla com tint azul.
+- Fallback total: sem `Mods\TitansAssets\titan.tpk` → corpo de primitivas v3 continua funcionando.
+
 ## v3 (2026-10-15) — fila executada
 - **Vapor**: rajadas de "fumaça" (esferas brancas que sobem e encolhem) na morte, nuca cortada, braço decepado, soco do aliado e transformação do Eren.
 - **Sons**: reusa AudioClips do próprio jogo achados em runtime (passos = clips de foot/land em pitch grave; vapor = clips de gás; impacto = hit/impact). AudioSource 3D por titã. Liga/desliga no menu.

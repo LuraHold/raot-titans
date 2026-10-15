@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using MelonLoader;
 using UnityEngine;
 using UnhollowerRuntimeLib;
@@ -50,6 +51,13 @@ namespace TitansMod
             public Transform grabHand;
             public AudioSource voice;
             public List<Renderer> skinParts = new List<Renderer>();
+            // modelo real (TitanPack)
+            public bool usesPack;
+            public TitanAnim anim;
+            public Transform[] boneTr;
+            public float actionUntil;      // enquanto Time.time < isto, clip de ação tem prioridade
+            public float pendingPushAt;    // hora de aplicar o empurrão da patada
+            public bool screamed;
         }
 
         private struct PlayerRef { public Vector3 pos; public bool isLocal; }
@@ -108,7 +116,13 @@ namespace TitansMod
             cfgCanEat = cat.CreateEntry("TitansCanEat", true, "Titã pode agarrar e comer");
             cfgSounds = cat.CreateEntry("TitanSounds", true, "Sons de passos/vapor (reusa áudio do jogo)");
             cfgGameSkin = cat.CreateEntry("UseGameSkin", true, "Usar material de titã do próprio jogo");
-            LoggerInstance.Msg("Titans v3. F6 titã | F9 waves | F10 menu | T Eren | G Levi | Y Mikasa | H Armin");
+            try
+            {
+                string assetDir = Path.Combine(MelonUtils.GameDirectory, "Mods", "TitansAssets");
+                TitanPack.TryLoad(assetDir, s => LoggerInstance.Msg(s));
+            }
+            catch (Exception e) { LoggerInstance.Warning("TitanPack: " + e.Message); }
+            LoggerInstance.Msg("Titans v4 (modelos AoTTG2). F6 titã | F9 waves | F10 menu | T Eren | G Levi | Y Mikasa | H Armin");
         }
 
         public override void OnUpdate()
@@ -359,6 +373,102 @@ namespace TitansMod
         }
 
         private Titan BuildTitan(TitanKind kind, float scale, Color skin)
+        {
+            if (TitanPack.Loaded != null)
+            {
+                try { return BuildPackTitan(kind, scale, skin); }
+                catch (Exception e) { LoggerInstance.Warning("BuildPackTitan falhou, usando primitivas: " + e.Message); }
+            }
+            return BuildPrimitiveTitan(kind, scale, skin);
+        }
+
+        private Titan BuildPackTitan(TitanKind kind, float scale, Color skin)
+        {
+            var pack = TitanPack.Loaded;
+            var t = new Titan { kind = kind, scale = scale, spawnTime = Time.time, usesPack = true };
+
+            string tex;
+            switch (kind)
+            {
+                case TitanKind.Runner: tex = "tex_skinny_titan.png"; break;
+                case TitanKind.Jumper: tex = "tex_medium_titan.png"; break;
+                case TitanKind.Crawler: tex = "tex_muscle_titan.png"; break;
+                case TitanKind.Ally: tex = "tex_vanilla_titan.png"; break;
+                default: tex = (rng.Next(2) == 0) ? "tex_vanilla_titan.png" : "tex_fat_titan.png"; break;
+            }
+            Color tint = kind == TitanKind.Ally ? new Color(0.55f, 0.7f, 1f) : Color.white;
+
+            Transform[] boneTr;
+            var root = pack.BuildInstance(tex, tint, titanSkinMat, out boneTr);
+            root.name = "TITAN_" + kind;
+            t.root = root; t.tr = root.transform; t.boneTr = boneTr;
+            t.anim = new TitanAnim(pack, boneTr);
+            t.anim.Play(kind == TitanKind.Crawler ? "crawler.idle" : "idle", true, 0.01f);
+            t.anim.Update(0.02f); // aplica pose inicial
+
+            // mede a altura crua e escala pro tamanho desejado
+            float desired = 2.45f * scale;
+            float raw = 2.45f;
+            try
+            {
+                Bounds b = new Bounds(root.transform.position, Vector3.one);
+                bool first = true;
+                foreach (var r in root.GetComponentsInChildren<Renderer>(true))
+                {
+                    if (first) { b = r.bounds; first = false; } else b.Encapsulate(r.bounds);
+                }
+                if (!first && b.size.y > 0.2f) raw = b.size.y;
+            }
+            catch { }
+            root.transform.localScale = Vector3.one * (desired / raw);
+            t.height = (kind == TitanKind.Crawler ? 0.62f : 1f) * desired;
+
+            // âncoras nos hitboxes/sockets reais do rig do AoTTG2
+            t.hips = boneTr[pack.FindBone("hip")];
+            t.torso = boneTr[pack.FindBone("chest")];
+            t.head = boneTr[pack.FindBone("head")];
+            t.napeAnchor = boneTr[pack.FindBone("NapeHurtbox")];
+            t.handL = boneTr[pack.FindBone("GrabLSocket")];
+            t.handR = boneTr[pack.FindBone("GrabRSocket")];
+            t.wristL = boneTr[pack.FindBone("ForearmLHurtbox")];
+            t.wristR = boneTr[pack.FindBone("ForearmRHurtbox")];
+            t.kneeL = boneTr[pack.FindBone("LegLHurtbox")];
+            t.kneeR = boneTr[pack.FindBone("LegRHurtbox")];
+            t.armL = boneTr[pack.FindBone("upper_arm.L")];
+            t.armR = boneTr[pack.FindBone("upper_arm.R")];
+
+            try
+            {
+                t.voice = root.AddComponent<AudioSource>();
+                t.voice.spatialBlend = 1f;
+                t.voice.maxDistance = 350f;
+                t.voice.rolloffMode = AudioRolloffMode.Linear;
+                t.voice.playOnAwake = false;
+            }
+            catch { }
+
+            if (cfgShowNape.Value && kind != TitanKind.Ally && t.napeAnchor != null)
+            {
+                var glow = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+                var col = glow.GetComponent<Collider>();
+                if (col != null) Object.Destroy(col);
+                glow.name = "nape_glow";
+                glow.transform.SetParent(t.napeAnchor, false);
+                glow.transform.localScale = Vector3.one * 0.35f;
+                try
+                {
+                    var m = glow.GetComponent<Renderer>().material;
+                    m.color = new Color(1f, 0.1f, 0.1f);
+                    m.EnableKeyword("_EMISSION");
+                    m.SetColor("_EmissionColor", new Color(1.6f, 0.12f, 0.12f));
+                }
+                catch { }
+                t.napeMarker = glow;
+            }
+            return t;
+        }
+
+        private Titan BuildPrimitiveTitan(TitanKind kind, float scale, Color skin)
         {
             var t = new Titan { kind = kind, scale = scale, spawnTime = Time.time };
             Color dark = skin * 0.8f;
@@ -636,6 +746,20 @@ namespace TitansMod
                 if (t.root == null) { titans.RemoveAt(i); continue; }
                 t.stateTime += dt;
                 float age = Time.time - t.spawnTime;
+                if (t.anim != null) t.anim.Update(dt);
+
+                // patada agendada (sincronizada com a animação de swing)
+                if (t.pendingPushAt > 0f && Time.time >= t.pendingPushAt)
+                {
+                    t.pendingPushAt = 0f;
+                    var lp = PlayerTransform();
+                    if (lp != null && Vector3.Distance(lp.position, t.tr.position) < t.height * 0.55f)
+                    {
+                        PushPlayer((lp.position - t.tr.position).normalized * 24f + Vector3.up * 12f);
+                        PlaySfx(t, clipHit, 1f, 0.6f);
+                        Say("Patada do titã! Voa pra nuca!");
+                    }
+                }
 
                 if (arminOver && t.speedMul < 1f)
                 {
@@ -645,10 +769,13 @@ namespace TitansMod
 
                 if (t.state == TitanState.Dying)
                 {
-                    t.tr.Rotate(Vector3.right, Mathf.Max(0f, 75f * dt * (1.6f - t.stateTime)), Space.Self);
-                    if (t.stateTime > 1.2f) t.tr.position += Vector3.down * dt * 0.4f;
+                    if (!t.usesPack)
+                    {
+                        t.tr.Rotate(Vector3.right, Mathf.Max(0f, 75f * dt * (1.6f - t.stateTime)), Space.Self);
+                        if (t.stateTime > 1.2f) t.tr.position += Vector3.down * dt * 0.4f;
+                    }
                     if (rng.Next(100) < 20) SteamBurst(t.napeAnchor != null ? t.napeAnchor.position : t.tr.position + Vector3.up * t.height * 0.7f, t.height * 0.25f, 1);
-                    if (t.stateTime > 6f) { SteamBurst(t.tr.position + Vector3.up * 2f, t.height * 0.5f, 10); Object.Destroy(t.root); titans.RemoveAt(i); }
+                    if (t.stateTime > 7f) { SteamBurst(t.tr.position + Vector3.up * 2f, t.height * 0.5f, 10); Object.Destroy(t.root); titans.RemoveAt(i); }
                     continue;
                 }
 
@@ -674,13 +801,25 @@ namespace TitansMod
 
                 if (t.state == TitanState.Stunned)
                 {
-                    float f = Mathf.Clamp01(t.stateTime / 0.4f);
-                    t.hips.localPosition = new Vector3(0f, Mathf.Lerp(1.15f, 0.55f, f), 0f);
-                    t.torso.localRotation = Quaternion.Euler(Mathf.Lerp(0f, 55f, f), 0f, 0f);
+                    if (t.usesPack)
+                    {
+                        if (t.stateTime < 1.0f) t.anim.Play("sit_down", false);
+                        else if (t.stateTime < 4.3f) t.anim.Play("sit_idle", true);
+                        else t.anim.Play("sit_getup", false);
+                    }
+                    else
+                    {
+                        float f = Mathf.Clamp01(t.stateTime / 0.4f);
+                        t.hips.localPosition = new Vector3(0f, Mathf.Lerp(1.15f, 0.55f, f), 0f);
+                        t.torso.localRotation = Quaternion.Euler(Mathf.Lerp(0f, 55f, f), 0f, 0f);
+                    }
                     if (t.stateTime > 6f)
                     {
-                        t.hips.localPosition = new Vector3(0f, t.kind == TitanKind.Crawler ? 0.62f : 1.15f, 0f);
-                        t.torso.localRotation = t.kind == TitanKind.Crawler ? Quaternion.Euler(68f, 0f, 0f) : Quaternion.identity;
+                        if (!t.usesPack)
+                        {
+                            t.hips.localPosition = new Vector3(0f, t.kind == TitanKind.Crawler ? 0.62f : 1.15f, 0f);
+                            t.torso.localRotation = t.kind == TitanKind.Crawler ? Quaternion.Euler(68f, 0f, 0f) : Quaternion.identity;
+                        }
                         SetState(t, TitanState.Chase);
                     }
                     continue;
@@ -695,11 +834,24 @@ namespace TitansMod
                 Vector3 to = targetPos - t.tr.position; to.y = 0f;
                 float dist = to.magnitude;
                 bool sees = dist < 16f || (dist < cfgViewDist.Value && Vector3.Angle(t.tr.forward, to) < 75f);
-                if (t.state == TitanState.Wander && sees) { SetState(t, TitanState.Chase); if (dist > 30f && targetIsLocal) Say(KindName(t.kind) + " te viu!"); }
+                if (t.state == TitanState.Wander && sees)
+                {
+                    SetState(t, TitanState.Chase);
+                    if (dist > 30f && targetIsLocal) Say(KindName(t.kind) + " te viu!");
+                    // rugido ao avistar (modelo real, uma vez, só se estiver longe)
+                    if (t.usesPack && !t.screamed && dist > 28f && t.kind != TitanKind.Crawler)
+                    {
+                        t.screamed = true;
+                        t.anim.Play("attack.scream", false);
+                        t.actionUntil = Time.time + 2.4f;
+                        PlaySfx(t, clipHit, 1f, 0.25f);
+                    }
+                }
                 else if (t.state == TitanState.Chase && dist > cfgViewDist.Value * 1.7f) SetState(t, TitanState.Wander);
 
                 if (t.state == TitanState.Leap)
                 {
+                    if (t.usesPack) t.anim.Play("Titanjumping", false);
                     Vector3 dir = Quaternion.Euler(0f, t.wanderHeading, 0f) * Vector3.forward;
                     float tt = t.stateTime;
                     t.tr.position += dir * t.speed * 3.2f * dt + Vector3.up * (9f - 18f * tt) * dt;
@@ -732,6 +884,7 @@ namespace TitansMod
                 t.wanderHeading = (float)rng.NextDouble() * 360f;
                 t.nextWanderTurn = Time.time + 4f + (float)rng.NextDouble() * 5f;
             }
+            if (t.usesPack) t.anim.Play(t.kind == TitanKind.Crawler ? "crawler.run" : "run.walk", true);
             t.tr.rotation = Quaternion.Slerp(t.tr.rotation, Quaternion.Euler(0f, t.wanderHeading, 0f), 1.2f * dt);
             Step(t, t.speed * 0.35f * t.speedMul, dt);
         }
@@ -741,6 +894,9 @@ namespace TitansMod
             if (dist < 0.5f) return;
             Vector3 dir = to / dist;
             t.tr.rotation = Quaternion.Slerp(t.tr.rotation, Quaternion.LookRotation(dir), 2.4f * dt);
+
+            // ação em andamento (rugido/swing): só gira, não anda
+            if (t.usesPack && Time.time < t.actionUntil) return;
 
             if (t.kind == TitanKind.Jumper && dist > 25f && dist < 90f && Time.time - t.lastLeap > 5f)
             {
@@ -752,9 +908,17 @@ namespace TitansMod
             }
 
             float stopRange = t.height * 0.28f;
-            if (dist > stopRange) Step(t, t.speed * t.speedMul, dt);
+            if (dist > stopRange)
+            {
+                if (t.usesPack)
+                    t.anim.Play(t.kind == TitanKind.Crawler ? "crawler.run"
+                        : (t.kind == TitanKind.Runner ? "run.abnormal" : "run.walk"), true);
+                Step(t, t.speed * t.speedMul, dt);
+            }
+            else if (t.usesPack) t.anim.Play(t.kind == TitanKind.Crawler ? "crawler.idle" : "idle", true);
 
-            bool canGrab = cfgCanEat.Value && !(t.armLGone && t.armRGone) && t.kind != TitanKind.Crawler;
+            bool canGrab = cfgCanEat.Value && t.kind != TitanKind.Crawler
+                && (t.usesPack ? !t.armRGone : !(t.armLGone && t.armRGone));
             float reach = t.height * 0.4f;
             bool playerLow = targetPos.y < t.tr.position.y + t.height * 0.85f;
             if (targetIsLocal && dist < reach && playerLow && Time.time - t.spawnTime > 1.5f && Time.time - t.lastGrabTry > 3.5f)
@@ -762,16 +926,26 @@ namespace TitansMod
                 t.lastGrabTry = Time.time;
                 if (canGrab && rng.Next(100) < 55)
                 {
-                    t.grabHand = (!t.armRGone) ? t.handR : t.handL;
+                    t.grabHand = (t.usesPack || !t.armRGone) ? t.handR : t.handL;
                     t.grabStart = Time.time;
                     SetState(t, TitanState.Grab);
+                    if (t.usesPack) { t.anim.Play("grab.ground.front.r", false); t.actionUntil = Time.time + 2.0f; }
                     Announce("TE AGARROU! Corta o PULSO dele pra escapar!");
                 }
                 else
                 {
-                    PushPlayer((targetPos - t.tr.position).normalized * 24f + Vector3.up * 12f);
-                    PlaySfx(t, clipHit, 1f, 0.6f);
-                    Say("Patada do titã! Voa pra nuca!");
+                    if (t.usesPack)
+                    {
+                        t.anim.Play(rng.Next(2) == 0 ? "attack.swing.r" : "attack.swing.l", false);
+                        t.actionUntil = Time.time + 1.6f;
+                        t.pendingPushAt = Time.time + 0.75f;
+                    }
+                    else
+                    {
+                        PushPlayer((targetPos - t.tr.position).normalized * 24f + Vector3.up * 12f);
+                        PlaySfx(t, clipHit, 1f, 0.6f);
+                        Say("Patada do titã! Voa pra nuca!");
+                    }
                 }
             }
         }
@@ -790,6 +964,8 @@ namespace TitansMod
             if (t.lastStepSign != 0f && Mathf.Sign(swing) != t.lastStepSign)
                 PlaySfx(t, clipStomp, Mathf.Clamp01(t.scale / 10f), 0.35f + (float)rng.NextDouble() * 0.15f);
             t.lastStepSign = Mathf.Sign(swing);
+
+            if (t.usesPack) return; // animação real cuida dos membros
 
             float amp = t.kind == TitanKind.Runner ? 42f : 28f;
             if (t.legL != null) t.legL.localRotation = Quaternion.Euler(swing * amp, 0f, 0f);
@@ -813,6 +989,22 @@ namespace TitansMod
                 totalScore += 40;
                 PushPlayer(Vector3.up * 10f);
                 StunTitan(t);
+                return;
+            }
+
+            if (t.usesPack)
+            {
+                // 0-2s: animação de agarrar; depois: comer. Morte sincronizada com a mordida.
+                if (held < 2.0f) t.anim.Play("grab.ground.front.r", false);
+                else t.anim.Play("eat.r", false);
+                if (held > 0.5f) HoldPlayerAt(t.grabHand.position);
+                if (held > 4.6f)
+                {
+                    Announce("O TITÃ TE COMEU!");
+                    PlaySfx(t, clipHit, 1f, 0.4f);
+                    KillPlayer();
+                    SetState(t, TitanState.Chase);
+                }
                 return;
             }
 
@@ -847,12 +1039,17 @@ namespace TitansMod
             if (dist > 0.5f)
             {
                 t.tr.rotation = Quaternion.Slerp(t.tr.rotation, Quaternion.LookRotation(to / dist), 3f * dt);
-                if (dist > t.height * 0.35f) Step(t, t.speed, dt);
+                if (dist > t.height * 0.35f)
+                {
+                    if (t.usesPack && Time.time >= t.actionUntil) t.anim.Play("run.abnormal", true);
+                    Step(t, t.speed, dt);
+                }
             }
             if (dist < t.height * 0.45f && Time.time - t.lastGrabTry > 1.6f)
             {
                 t.lastGrabTry = Time.time;
                 totalScore += 50; kills++;
+                if (t.usesPack) { t.anim.Play("attack.swing.r", false); t.actionUntil = Time.time + 1.4f; }
                 PlaySfx(t, clipHit, 1f, 0.5f);
                 SteamBurst(target.tr.position + Vector3.up * target.height * 0.6f, target.height * 0.3f, 8);
                 Announce("Soco do titã aliado! +50 pts");
@@ -890,6 +1087,8 @@ namespace TitansMod
             if (t.napeMarker != null) { try { Object.Destroy(t.napeMarker); } catch { } t.napeMarker = null; }
             PlaySfx(t, clipSteam, 0.9f, 0.6f);
             SetState(t, TitanState.Dying);
+            if (t.usesPack)
+                t.anim.Play(t.kind == TitanKind.Crawler ? "crawler.die" : (rng.Next(2) == 0 ? "die.front" : "die.back"), false);
         }
 
         private void SeverArm(Titan t, bool right)
@@ -900,7 +1099,8 @@ namespace TitansMod
             if (arm != null)
             {
                 SteamBurst(arm.position, t.height * 0.15f, 6);
-                arm.gameObject.SetActive(false);
+                if (t.usesPack) arm.localScale = Vector3.one * 0.001f; // colapsa o braço no ombro (malha skinned)
+                else arm.gameObject.SetActive(false);
             }
             totalScore += 25;
             PlaySfx(t, clipHit, 1f, 0.9f);

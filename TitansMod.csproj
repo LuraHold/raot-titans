@@ -46,6 +46,10 @@
       <HintPath>$(GamePath)\MelonLoader\Managed\UnityEngine.InputLegacyModule.dll</HintPath>
       <Private>false</Private>
     </Reference>
+    <Reference Include="UnityEngine.ImageConversionModule">
+      <HintPath>$(GamePath)\MelonLoader\Managed\UnityEngine.ImageConversionModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
     <Reference Include="UnityEngine.AudioModule">
       <HintPath>$(GamePath)\MelonLoader\Managed\UnityEngine.AudioModule.dll</HintPath>
       <Private>false</Private>
