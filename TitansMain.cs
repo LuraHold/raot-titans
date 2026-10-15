@@ -283,12 +283,30 @@ namespace TitansMod
             if (!cfgSounds.Value || clip == null || t.voice == null) return;
             try
             {
-                t.voice.clip = clip;
-                t.voice.volume = volume;
                 t.voice.pitch = pitch;
-                t.voice.Play();
+                t.voice.PlayOneShot(clip, volume); // one-shot: sons se sobrepõem (passo + rugido etc.)
             }
             catch { }
+        }
+
+        // Som real do AoTTG2 por grupo (roar/step/bite/nape/death/laugh/limbhit/hit); null se o pacote não carregou
+        private AudioClip Sfx(string group)
+        {
+            if (TitanSfx.Loaded == null)
+            {
+                try { TitanSfx.TryLoad(Path.Combine(MelonUtils.GameDirectory, "Mods", "TitansAssets", "sfx"), s => LoggerInstance.Msg(s)); }
+                catch { }
+                if (TitanSfx.Loaded == null) return null;
+            }
+            return TitanSfx.Loaded.Get(group);
+        }
+
+        // Toca o som real se existir; senão o improvisado do RAOT com o pitch dado
+        private void Voice(Titan t, string group, AudioClip fallback, float volume, float fallbackPitch)
+        {
+            var real = Sfx(group);
+            if (real != null) PlaySfx(t, real, volume, 1f);
+            else PlaySfx(t, fallback, volume, fallbackPitch);
         }
 
         // ---------------- spawn / corpo ----------------
@@ -988,7 +1006,7 @@ namespace TitansMod
                         t.screamed = true;
                         t.anim.Play("attack.scream", false);
                         t.actionUntil = Time.time + 2.4f;
-                        PlaySfx(t, clipHit, 1f, 0.25f);
+                        Voice(t, "roar", clipHit, 1f, 0.25f);
                     }
                 }
                 else if (t.state == TitanState.Chase && dist > cfgViewDist.Value * 1.7f) SetState(t, TitanState.Wander);
@@ -1003,7 +1021,7 @@ namespace TitansMod
                     if (tt > 0.25f && t.tr.position.y <= g.y + 0.1f)
                     {
                         t.tr.position = g;
-                        PlaySfx(t, clipStomp, 1f, 0.45f);
+                        Voice(t, "step", clipStomp, 1f, 0.45f);
                         SetState(t, TitanState.Chase);
                     }
                     continue;
@@ -1076,6 +1094,7 @@ namespace TitansMod
                     t.grabStart = Time.time;
                     SetState(t, TitanState.Grab);
                     if (t.usesPack) { t.anim.Play("grab.ground.front.r", false); t.actionUntil = Time.time + 2.0f; }
+                    Voice(t, "laugh", null, 1f, 1f);
                     Announce("TE AGARROU! Corta o PULSO dele pra escapar!");
                 }
                 else
@@ -1196,7 +1215,7 @@ namespace TitansMod
 
             // passo tocou o chão (troca de sinal) = som de pisada
             if (t.lastStepSign != 0f && Mathf.Sign(swing) != t.lastStepSign)
-                PlaySfx(t, clipStomp, Mathf.Clamp01(t.scale / 10f), 0.35f + (float)rng.NextDouble() * 0.15f);
+                Voice(t, "step", clipStomp, Mathf.Clamp01(t.scale / 10f), 0.35f + (float)rng.NextDouble() * 0.15f);
             t.lastStepSign = Mathf.Sign(swing);
 
             if (t.usesPack) return; // animação real cuida dos membros
@@ -1236,7 +1255,7 @@ namespace TitansMod
                 if ((held > 3.0f && atMouth) || held > 10f)
                 {
                     Announce("O TITÃ TE COMEU!");
-                    PlaySfx(t, clipHit, 1f, 0.4f);
+                    Voice(t, "bite", clipHit, 1f, 0.4f);
                     KillPlayer();
                     SetState(t, TitanState.Chase);
                 }
@@ -1285,7 +1304,7 @@ namespace TitansMod
                 t.lastGrabTry = Time.time;
                 totalScore += 50; kills++;
                 if (t.usesPack) { t.anim.Play("attack.swing.r", false); t.actionUntil = Time.time + 1.4f; }
-                PlaySfx(t, clipHit, 1f, 0.5f);
+                Voice(t, "hit", clipHit, 1f, 0.5f);
                 SteamBurst(target.tr.position + Vector3.up * target.height * 0.6f, target.height * 0.3f, 8);
                 Announce("Soco do titã aliado! +50 pts");
                 StartDeath(target);
@@ -1312,7 +1331,7 @@ namespace TitansMod
 
             Announce(grade + "  +" + points + " pts  (" + praise + ")");
             LoggerInstance.Msg(grade + " +" + points + " [vel " + playerSpeed.ToString("F1") + " | precisão " + (precision * 100f).ToString("F0") + "%]");
-            PlaySfx(t, clipHit, 1f, 1.1f);
+            Voice(t, "nape", clipHit, 1f, 1.1f);
             SteamBurst(t.napeAnchor.position, t.height * 0.2f, 10);
             StartDeath(t);
         }
@@ -1321,7 +1340,7 @@ namespace TitansMod
         {
             if (t.napeMarker != null) { try { Object.Destroy(t.napeMarker); } catch { } t.napeMarker = null; }
             SetPointsTargetable(t, false);
-            PlaySfx(t, clipSteam, 0.9f, 0.6f);
+            Voice(t, "death", clipSteam, 1f, 0.6f);
             SetState(t, TitanState.Dying);
             if (t.usesPack)
                 t.anim.Play(t.kind == TitanKind.Crawler ? "crawler.die" : (rng.Next(2) == 0 ? "die.front" : "die.back"), false);
@@ -1340,7 +1359,7 @@ namespace TitansMod
             }
             if (t.points != null) { try { t.points[right ? 2 : 1].IsTargetable = false; } catch { } }
             totalScore += 25;
-            PlaySfx(t, clipHit, 1f, 0.9f);
+            Voice(t, "limbhit", clipHit, 1f, 0.9f);
             Say("Braço decepado! +25 pts");
             if (t.state == TitanState.Grab) SetState(t, TitanState.Chase);
         }
@@ -1349,7 +1368,7 @@ namespace TitansMod
         {
             t.lastJointHit = Time.time;
             totalScore += 15;
-            PlaySfx(t, clipStomp, 1f, 0.3f);
+            Voice(t, "limbhit", clipStomp, 1f, 0.3f);
             SetState(t, TitanState.Stunned);
             Say("Acertou a junta! Titã caiu — NUCA EXPOSTA! +15 pts");
         }

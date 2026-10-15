@@ -29,7 +29,7 @@ Bugs reportados pelo Jeff em 2026-10-15:
 **Aceite:** 15 min de sessão com waves sem nenhum bug visual; titã parece nativo do jogo; gancho gruda; dá pra voar sem teto.
 
 ### F1 — Experiência de caça completa
-- Rugido e sons próprios do titã (extrair SFX do AoTTG2 com o mesmo pipeline, ou sintetizar).
+- [x] Rugido e sons próprios do titã: 24 SFX extraídos do AoTTG2 (`assets/sfx/*.wav`, carregados como AudioClip em runtime via `TitanSfx`): rugido ao avistar (3 var.), passos (3), risada no agarrão, mordida na devorada, corte de nuca (4) + morte (5), golpe em junta. Som do RAOT fica como fallback.
 - VFX de corte na nuca (sangue/vapor direcional), vapor de morte mais denso.
 - Ragdoll/queda com peso (hoje a morte é só animação).
 - Balanceamento de velocidades/visão por variante, com playtest do Jeff.
